@@ -189,6 +189,19 @@ void FlowPidControl(float dt)
 	if(ALL_flag.unlock == EMERGENT) //意外情况，请使用遥控紧急上锁，飞控就可以在任何情况下紧急中止飞行，锁定飞行器，退出PID控制
 		status = EXIT_255;
 	//----------------------------------------------控制
+    /* An invalid estimate is not a measured position of zero. Forget the
+     * old target/PID history and recapture the recovered coordinate frame. */
+    if (ALL_flag.unlock && (!ALL_flag.flow_control || !ALL_flag.height_lock ||
+                            !flow_position_ready())) {
+        pidRest(&pPidObject[8],4);
+        set_pos = 1;
+        status = WAITING_2;
+        if (ALL_flag.flow_control) {
+            pidRoll.desired = 0;
+            pidPitch.desired = 0;
+        }
+        return;
+    }
 	switch(status)
 	{
 		case WAITING_1:		

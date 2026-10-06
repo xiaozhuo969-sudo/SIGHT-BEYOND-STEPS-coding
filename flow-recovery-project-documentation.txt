@@ -1,0 +1,76 @@
+光流位置恢复修复说明（2026-10-06）
+
+一、范围与状态
+用户授权：先做好本地Git与备份，修复已确认的光流坐标失配问题并编译；本次不烧录。
+完成：代码修改、完整GCC构建、当前ELF离线专项验证、既有飞控回归验证。
+未执行：新固件上板、运行耗时实测、真实悬停与载荷调整效果验证。不能宣称此前前漂已实飞解决。
+
+二、问题及修复行为
+原代码在光流质量<=30或测高<80mm时清零位置估计，但水平位置PID保留旧目标，可能把坐标原点重置误认为真实位移，持续给出错误倾斜指令。修复前实际固件离线复现见：
+D:\Espressif\logs\distance-debug-20261006\paper-motion-231306\offline-flow-reset.json
+
+修复后的水平反馈判据：质量>30，最新有效样本高度80..3499mm，最近一次成功读取距当前不超过100ms。
+无效测量不累计到水平位移；质量或高度不合格即取消水平估计有效状态，即使坏帧发生在两个24ms控制周期之间也不会被下一份好帧掩盖。
+短暂I2C失败不立即清空定位，100ms内仍可使用此前有效数据；超过新鲜度窗口则停止使用。原先连续I2C失败导致退出定高/光流的逻辑保留。
+水平估计失效时：清理四个水平位置/速度PID状态、放弃旧目标；在光流模式下将横滚/俯仰期望置为水平，暂停位置纠偏；未开启光流的姿态/手势控制不受这项置零影响。
+连续有效200ms后（按24ms估计周期评估）：重新初始化倾角补偿与位移滤波，初始速度置零，避免恢复瞬间的虚假速度；水平控制重新记录恢复后的当前位置。
+这里的200ms为此次修复的稳定确认窗口，不是新增按键长按要求。若环境持续不满足质量条件，仍无法保证定点；丢失定位后重建的是恢复时的位置，不承诺回到失效前的绝对位置。
+定高PID、姿态/角速度PID系数、电机混控、起飞/降落/急停、NRF协议及手控GPIO9均未修改。
+
+三、修改文件
+官方小飞机的程序/主控程序(keil MDK打开)+外扩激光+光流20261001/HARDWARE/flow.c
+  样本有效性、新鲜度、恢复确认、估计初始化与有效样本积分。
+同工程/HARDWARE/flow.h
+  新增flow_position_ready声明。
+同工程/HAL/control.c
+  仅FlowPidControl增加无效估计保护和目标重建入口。
+同工程/port/verify_flow_recovery.py
+  实际ELF离线回归测试，不访问调试器、不发无线包、不调用实体电机。
+本说明文件。既有project-documentation.txt及手控制器/.vscode用户改动保留且已独立备份，不纳入修复提交。
+
+四、工具链与复现（PowerShell，工程路径按实际保存）
+Python：D:\Espressif\test-python\Scripts\python.exe
+ARM GCC：D:\Espressif\arm\arm-gnu-toolchain-13.2.Rel1-mingw-w64-i686-arm-none-eabi\bin
+GCC版本：13.2.Rel1 / 13.2.1，Cortex-M3，Thumb，soft-float。
+
+$flight = 'E:\APP\flay_111\小飞机\官方小飞机的程序\主控程序(keil MDK打开)+外扩激光+光流20261001'
+$env:PATH = 'D:\Espressif\arm\arm-gnu-toolchain-13.2.Rel1-mingw-w64-i686-arm-none-eabi\bin;' + $env:PATH
+& 'D:\Espressif\test-python\Scripts\python.exe' -X utf8 "$flight\port\build.py"
+& 'D:\Espressif\test-python\Scripts\python.exe' -X utf8 "$flight\port\verify_flow_recovery.py"
+& 'D:\Espressif\test-python\Scripts\python.exe' -X utf8 "$flight\port\verify.py"
+
+完整构建每次重新编译全部源文件并显式链接对象，不依赖旧对象残留。首轮因Windows默认GBK无法保存日志而退出，改用-X utf8后完整重跑成功；未为此改动构建脚本。
+原有C源码注释编码和CRLF保持；空白检查按CRLF与原缩进风格执行，未对整个文件做编码转换。
+
+五、验证结果
+专项：553条断言通过、0失败（包含周期内多次检查，不能当作553个独立场景）。
+覆盖：冷启动、有效估计保持、质量临界、高度0/79/3500、正常边界、单个坏帧、跨周期坏帧、数据超时、单次/连续I2C失败、200ms恢复、二次故障重启恢复计时、非零倾角恢复无虚假速度、正常位移仍有方向正确的纠偏、未开启光流的姿态命令保持、定高/角速度积分不被清理、计时溢出。
+既有回归：228项检查通过、0失败；包括原电机混控差分、PID算术、起飞/降落/急停、通信和测距协议等。
+构建：text=36212字节，data=744字节，bss=2228字节；链接成功。存在嵌入式libnosys关于_close/_lseek/_read/_write的链接警告，日志已保存，不宣称零警告。
+ELF SHA256：d5dd9af04ddb94cfa7cfd392df02067a084b5668a0f96a71dca820f0339ed96d
+固件模板 SHA256：88f6146de99cda50b9844c54b6ed4a1f96b1c0ddb3972583c32148ea9f80abb0
+验证与固件独立归档：D:\Espressif\releases\flow-position-recovery-20261006
+注意：official_hand.template.bin是含填充区的构建模板，不应直接整片覆盖已校准设备。未来烧录仍须采用项目既有备份/保留校准区流程，并另行取得烧录授权。本次设备仍是旧固件。
+
+六、Git与回退
+修复分支：fix/flow-position-recovery
+修复前提交：3b4aa06f6d790fa5cef17e2c1f996b77e8fdf8d0
+修复前标签：backup/flow-hold-before-20261006
+修复完成标签：release/flow-position-recovery-20261006
+外部完整备份：D:\Espressif\backups\flow-hold-20261006
+  repository.bundle：完整本地Git历史，已git bundle verify通过。
+  flight-before.zip：修复前飞控工程及原编译产物。
+  preexisting-local-files.zip、working-tree.patch：修复前用户未提交内容。
+  manifest.json：提交信息及备份校验值。
+
+回退本次修复（在本仓库内、检查没有新改动冲突后执行）：
+git revert release/flow-position-recovery-20261006
+这是新增一个反向提交，保留历史，不使用reset --hard，也不删除用户其他改动；有冲突时应停下处理，不能强制覆盖。
+也可只查看修复前源码而不改当前目录：
+git show backup/flow-hold-before-20261006:官方小飞机的程序/主控程序(keil MDK打开)+外扩激光+光流20261001/HARDWARE/flow.c
+（实际PowerShell命令应将含括号的完整Git对象参数用单引号包住。）
+代码回退不会自动更换板上固件。当前没有烧录新固件，所以板上无需回退；未来如已烧录，需要单独按保留校准区流程恢复原固件。
+
+七、后续上板验收边界
+先在锁定、停桨状态验证新固件启动、手控通信、有效状态及异常恢复；再由用户在适宜场地操控并记录中立通道、定高/光流模式、质量和位置反馈。
+重心与载荷变化、光流纹理和安装方向仍需实物验证。此次修复关闭已证实的软件错误路径，不保证所有漂移成因都已消除。
