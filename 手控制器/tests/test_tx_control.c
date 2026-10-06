@@ -79,8 +79,13 @@ static void test_altitude_mode(void)
             uint32_t now=fail==0?1751:fail==1?1000:1601;
             if(fail==2) s.heartbeat=now;
             assert(tx_step(&s,now,fail!=1,true,preview,out));
-            assert(s.phase==TX_STOPPING&&out[2]==1000);
-            tx_encode(&s,out,b);assert(b[3]==HC_DISARM);
+            if(stage==TX_ALT_LAND && fail==1) {
+                assert(s.phase==TX_ALT_LAND&&out[2]==1500);
+                tx_encode(&s,out,b);assert(b[3]==HC_LAND);
+            } else {
+                assert(s.phase==TX_STOPPING&&out[2]==1000);
+                tx_encode(&s,out,b);assert(b[3]==HC_DISARM);
+            }
         }
     }
     // Reserved uplink fields, undefined versions/commands and invalid stages reject.

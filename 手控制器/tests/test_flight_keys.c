@@ -154,6 +154,7 @@ int main(void)
         flight_keys_init(&k,&tx,false,false,1000);
         k.pending=true;k.local_owner=true;
         flight_keys_edge(&k,&tx,0,true,1010);
+        flight_keys_palm(&k,&tx,true,1020);
         flight_keys_edge(&k,&tx,1,true,1020);
         flight_keys_edge(&k,&tx,0,false,1030);
         assert(!k.launch_requested && !k.pending && !k.local_owner && k.stop_latched);

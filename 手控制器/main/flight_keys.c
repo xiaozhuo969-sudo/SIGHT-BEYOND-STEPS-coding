@@ -2,10 +2,34 @@
 
 void flight_keys_stop(flight_keys_t *k, tx_control_t *tx, uint32_t now)
 {
+    k->landing_active=false;
     k->pending=false; k->launch_requested=false; k->start_armed=false;
     k->local_owner=false; k->auto_connect=true; k->stop_latched=true; k->reason=KEY_ESTOP;
     tx_estop(tx,now);
     k->status=KEY_STOPPED;
+}
+
+/* GPIO11 requests latched landing; GPIO9+GPIO11 always wins as DISARM. */
+static void combo_stop(flight_keys_t *k,tx_control_t *tx,uint32_t now)
+{
+    bool both=k->palm_down && k->down[1];
+    if(both && !k->combo_latched) flight_keys_stop(k,tx,now);
+    k->combo_latched=both;
+}
+void flight_keys_palm(flight_keys_t *k,tx_control_t *tx,bool down,uint32_t now)
+{
+    if(!k->initialized)return;
+    k->palm_down=down;combo_stop(k,tx,now);
+}
+static void request_landing(flight_keys_t *k,tx_control_t *tx,uint32_t now)
+{
+    if(k->palm_down) {combo_stop(k,tx,now);return;}
+    if(tx->phase==TX_ALT_LAND)return; /* Holding/repeating cannot restart descent. */
+    if(tx_land(tx,now)) {
+        k->pending=false;k->launch_requested=false;k->start_armed=false;
+        k->landing_active=true;k->local_owner=true;k->auto_connect=false;
+        k->status=KEY_LANDING;k->reason=KEY_OK;tx->heartbeat=now;
+    } else flight_keys_stop(k,tx,now); /* Ground/arming: cancel, never launch. */
 }
 
 void flight_keys_init(flight_keys_t *k, tx_control_t *tx, bool start_down, bool stop_down, uint32_t now)
@@ -21,6 +45,7 @@ void flight_keys_autoconnect(flight_keys_t *k, tx_control_t *tx, uint32_t now, u
 {
     if(!k->initialized) return;
     if(tx->estop_active) {
+        if(k->landing_active) {k->landing_active=false;k->launch_requested=false;k->start_armed=false;}
         if(radio_ready && (tx->phase==TX_OFF || tx->phase==TX_FAULT)) tx_start_v3(tx,now,session);
         tx_estop_refresh_session(tx,now,session);
         tx->heartbeat=now;
@@ -54,11 +79,12 @@ void flight_keys_edge(flight_keys_t *k, tx_control_t *tx, unsigned key, bool dow
     k->down[key]=down;
     if(down) ++k->presses[key];
     if(key==1) {
-        if(down) flight_keys_stop(k,tx,now);
+        if(down) request_landing(k,tx,now);
+        else combo_stop(k,tx,now);
         return;
     }
     if(down) {
-        k->start_armed=k->start_released && !k->down[1] && !k->pending &&
+        k->start_armed=k->start_released && !k->down[1] && !k->pending && !k->landing_active &&
             (!tx->estop_active || tx_can_arm(tx,now));
     } else {
         if(k->start_armed && !k->down[1]) k->launch_requested=true;
@@ -101,14 +127,15 @@ static void cancel(flight_keys_t *k, tx_control_t *tx, uint32_t now, unsigned re
 void flight_keys_tick(flight_keys_t *k, tx_control_t *tx, uint32_t now,
                       bool radio_ready, bool imu_fresh, bool flat, bool centering, bool palm_down)
 {
-    if(k->down[1]) return; // The press edge already stopped; holding never restarts the timer.
+    flight_keys_palm(k,tx,palm_down,now);
+    if(k->down[1] && tx->phase!=TX_ALT_LAND) return; // LAND heartbeat must continue while held.
     if(k->status==KEY_STOPPING && (tx->phase==TX_OFF || tx->phase==TX_FAULT)) k->status=KEY_STOPPED;
     if(k->auto_connect) return; // Boot link heartbeat/status comes from autoconnect.
     if(!k->local_owner) return;
     if(tx->phase==TX_OFF || tx->phase==TX_FAULT || tx->phase==TX_STOPPING) {
         cancel(k,tx,now,tx->phase==TX_FAULT ? KEY_NO_RADIO : KEY_BUSY); return;
     }
-    if(!radio_ready || !imu_fresh) {
+    if(!radio_ready || (!imu_fresh && tx->phase!=TX_ALT_LAND)) {
         cancel(k,tx,now,!radio_ready ? KEY_NO_RADIO : KEY_NO_IMU); return;
     }
     // Refreshed by the independent 50ms control task, never by USB logging.
@@ -124,6 +151,7 @@ void flight_keys_tick(flight_keys_t *k, tx_control_t *tx, uint32_t now,
             k->pending=false; k->status=KEY_TAKEOFF;
         }
     } else if(tx->phase==TX_ALT_TAKEOFF) k->status=KEY_TAKEOFF;
+    else if(tx->phase==TX_ALT_LAND) k->status=KEY_LANDING;
     else k->status=KEY_ACTIVE;
 }
 

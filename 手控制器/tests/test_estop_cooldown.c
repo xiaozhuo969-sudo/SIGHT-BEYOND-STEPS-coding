@@ -20,6 +20,7 @@ int main(void)
 {
     tx_control_t t={0};flight_keys_t k;assert(tx_start_v3(&t,0,123));
     flight_keys_init(&k,&t,false,false,0);t.phase=TX_ALT_LIVE;k.pending=true;
+    flight_keys_palm(&k,&t,true,1000);
     flight_keys_edge(&k,&t,1,true,1000);
     assert(t.estop_active&&t.phase==TX_READY&&!k.pending&&k.stop_latched);
     t.feedback=true;t.feedback_ms=1000;t.air_command=HC_DISARM;t.air_flags=1;

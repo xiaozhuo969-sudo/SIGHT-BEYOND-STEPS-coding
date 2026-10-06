@@ -32,6 +32,11 @@ static const gpio_num_t s_led_pins[LED_COUNT] = {
 };
 static const char *TAG = "led_demo";
 
+bool flight_palm_pressed(void)
+{
+    return gpio_get_level(PALM_BUTTON_GPIO)==FLIGHT_BUTTON_ACTIVE_LEVEL;
+}
+
 bool flight_stop_pressed(void)
 {
     return gpio_get_level(STOP_BUTTON_GPIO)==FLIGHT_BUTTON_ACTIVE_LEVEL;
@@ -139,7 +144,7 @@ void led_demo_start(void)
         ESP_ERROR_CHECK(iot_button_register_cb(flight_buttons[i],BUTTON_PRESS_DOWN,NULL,flight_key_down,(void *)(uintptr_t)i));
         ESP_ERROR_CHECK(iot_button_register_cb(flight_buttons[i],BUTTON_PRESS_UP,NULL,flight_key_up,(void *)(uintptr_t)i));
     }
-    ESP_LOGI(TAG,"LED1/GPIO10: connect+takeoff on release; LED2/GPIO11: immediate stop (active low)");
+    ESP_LOGI(TAG,"LED1/GPIO10: connect+takeoff on release; GPIO11: land; GPIO9+GPIO11: immediate stop (active low)");
 
     // The assembled palm button measured high at rest and low when pressed.
     // A pull-down keeps GPIO9 low when the switch opens.

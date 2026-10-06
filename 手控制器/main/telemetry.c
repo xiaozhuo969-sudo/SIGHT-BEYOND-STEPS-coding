@@ -81,6 +81,7 @@ bool telemetry_tx_frame(uint8_t packet[32])
     const bool fresh = s_state.imu && now - s_state.attitude_us < 500000 &&
                        s_preview_us && now - s_preview_us < 300000 &&
                        isfinite(s_state.pitch) && isfinite(s_state.roll);
+    flight_keys_palm(&s_keys,&s_tx,flight_palm_pressed(),(uint32_t)(now/1000));
     if(flight_stop_pressed()) {
         flight_keys_edge(&s_keys,&s_tx,1,true,(uint32_t)(now/1000));
     }
@@ -216,6 +217,7 @@ void telemetry_flight_key(unsigned key, bool pressed)
 {
     portENTER_CRITICAL(&s_mux);
     if(key==0 && s_led_test_pin>=0) { portEXIT_CRITICAL(&s_mux); return; }
+    flight_keys_palm(&s_keys,&s_tx,flight_palm_pressed(),(uint32_t)(esp_timer_get_time()/1000));
     flight_keys_edge(&s_keys,&s_tx,key,pressed,(uint32_t)(esp_timer_get_time()/1000));
     portEXIT_CRITICAL(&s_mux);
 }
@@ -225,6 +227,7 @@ void telemetry_set_button(bool pressed)
     portENTER_CRITICAL(&s_mux);
     if(pressed && !s_state.button && !s_keys.down[1] && !s_keys.stop_latched)
         tx_clear_obstacle(&s_tx,(uint32_t)(esp_timer_get_time()/1000));
+    flight_keys_palm(&s_keys,&s_tx,pressed,(uint32_t)(esp_timer_get_time()/1000));
     s_state.button = pressed;
     /* A palm edge can clear the local latch before the next 50 ms gesture tick. */
     if(pressed) for(unsigned i=0;i<4;++i) s_preview[i]=1500;
@@ -305,6 +308,7 @@ static void control_task(void *arg)
         const uint32_t now_ms=(uint32_t)(now/1000), session=esp_random();
         const bool hard_stop=flight_stop_pressed();
         portENTER_CRITICAL(&s_mux);
+        flight_keys_palm(&s_keys,&s_tx,flight_palm_pressed(),now_ms);
         if(hard_stop) flight_keys_edge(&s_keys,&s_tx,1,true,now_ms);
         const bool fresh=s_state.imu && now-s_state.attitude_us<500000 &&
                          isfinite(s_state.pitch) && isfinite(s_state.roll);
@@ -322,7 +326,7 @@ static void control_task(void *arg)
         s_preview_us=now;
         flight_keys_tick(&s_keys,&s_tx,now_ms,s_state.rc_ready,fresh,
             s_gesture.calibrated && s_signal==GESTURE_FLAT,
-            s_gesture.calibrated && s_gesture.phase==1,s_state.button);
+            s_gesture.calibrated && s_gesture.phase==1,flight_palm_pressed());
         tx_guard_refresh(&s_tx,now_ms);
         bool obstacle_alarm=tx_obstacle_alarm(&s_tx);
         bool tilt_alarm=s_tx.guard.tilt;
@@ -514,6 +518,7 @@ static void command_task(void *arg)
             uint32_t session = esp_random();
             const bool hard_stop=flight_stop_pressed();
             portENTER_CRITICAL(&s_mux);
+            flight_keys_palm(&s_keys,&s_tx,flight_palm_pressed(),now);
             if(hard_stop) flight_keys_edge(&s_keys,&s_tx,1,true,now);
             const bool motion_allowed=s_led_test_pin<0 && !s_keys.down[1] && !s_keys.pending &&
                 (!s_keys.stop_latched || (s_tx.estop_active && tx_can_arm(&s_tx,now)));

@@ -3,6 +3,7 @@ from pathlib import Path
 import os, subprocess, tempfile
 root=Path(__file__).resolve().parents[1]
 sources={
+    'landing_keys':['flight_keys','tx_control'],
     'flow_diagnostics':['tx_control'], 'gesture':['gesture'], 'gyro_calibration':['gyro_calibration'],
     'tx_control':['tx_control'], 'flight_keys':['flight_keys','tx_control'],
     'control_output':['control_output','gesture','remote_protocol','tx_control'],

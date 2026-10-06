@@ -21,6 +21,7 @@ bool hand_link_receive(const uint8_t raw[32]);
 bool hand_link_owned(void);
 void hand_link_tick(void);
 bool hand_link_takeoff_target(float *target);
+bool hand_link_landing_velocity(float *velocity);
 void hand_link_imu(bool ok);
 void hand_link_height(bool ok,uint16_t mm);
 void hand_link_motor_observe(void);

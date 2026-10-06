@@ -111,7 +111,7 @@ bool tx_step(tx_control_t *s, uint32_t now, bool pose_valid, bool flat,
         return true;
     }
     if ((uint32_t)(now - s->heartbeat) > 750) tx_stop(s, now, TX_REASON_HEARTBEAT);
-    if (!pose_valid) tx_stop(s, now, TX_REASON_IMU);
+    if (!pose_valid && s->phase!=TX_ALT_LAND) tx_stop(s, now, TX_REASON_IMU);
     if (s->v2) {
         if (s->phase == TX_ARM_REQUEST && (uint32_t)(now-s->since)>3000)
             tx_stop(s,now,TX_REASON_ARM_TIMEOUT);
@@ -167,7 +167,8 @@ bool tx_takeoff(tx_control_t *s, uint32_t now, bool flat_calibrated)
 }
 bool tx_land(tx_control_t *s, uint32_t now)
 {
-    if(!s->v3 || (s->phase!=TX_ALT_TAKEOFF&&s->phase!=TX_ALT_LIVE)) return false;
+    if(!s->v3 || (s->phase!=TX_ALT_TAKEOFF&&s->phase!=TX_ALT_LIVE&&
+       s->phase!=TX_ALT_MANUAL&&s->phase!=TX_ALT_LOST&&s->phase!=TX_ALT_RESUME)) return false;
     phase(s,TX_ALT_LAND,now);return true;
 }
 bool tx_can_resume(const tx_control_t *s, uint32_t now, bool flat_calibrated)
@@ -255,7 +256,11 @@ void tx_feedback(tx_control_t *s, const uint8_t packet[32], uint32_t now)
         if(s->phase==TX_ARM_REQUEST && s->air_command==HC_ARM && (s->air_flags&1) &&
            s->air_stage==HC_STAGE_IDLE && s->air_reason==HC_OK) phase(s,TX_ALT_IDLE,now);
         else if(s->phase>=TX_ALT_IDLE && s->phase<=TX_ALT_RESUME) {
-            if(!(s->air_flags&1)) tx_stop(s,now,TX_REASON_AIR_LOCK);
+            if(!(s->air_flags&1) && s->phase==TX_ALT_LAND && s->air_stage==HC_STAGE_LOCKED) {
+                /* Successful landing keeps locked communication and the10s gate. */
+                tx_estop(s,now);
+            }
+            else if(!(s->air_flags&1)) tx_stop(s,now,TX_REASON_AIR_LOCK);
             else if(s->air_stage==HC_STAGE_HEIGHT_LOST) phase(s,TX_ALT_LOST,now);
             else if(s->air_stage==HC_STAGE_MANUAL && (s->phase!=TX_ALT_RESUME||
                     (s->air_command==HC_RESUME&&s->air_reason!=HC_OK))) phase(s,TX_ALT_MANUAL,now);

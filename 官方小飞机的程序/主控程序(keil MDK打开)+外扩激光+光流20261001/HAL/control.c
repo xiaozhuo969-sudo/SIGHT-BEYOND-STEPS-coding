@@ -125,6 +125,10 @@ void HeightPidControl(float dt)
                 /* Bound automatic ascent/descent speed demand, not motor duty. */
                 pidHeightRate.desired=LIMIT(pidHeightHigh.out,-150.0f,250.0f);
             }
+            else if(hand_link_landing_velocity(&takeoff_target)) {
+                set_high=0;
+                pidHeightRate.desired=takeoff_target;
+            }
             else if(Remote.thr<1750 && Remote.thr>1150) //如果油门已回中，不调高度
 			 {
 						if(set_high == 0) //如果刚退出调高，记录当前位置为定高位置
