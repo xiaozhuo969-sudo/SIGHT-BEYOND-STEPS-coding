@@ -1,0 +1,16 @@
+手控启动陀螺仪校准3秒/5度每秒
+确认需求：用户明确选择“角速度波动不超过5°/s，沿用当前校准方式”，连续3秒，授权编译烧录。5°/s不是姿态角变化5°。
+改动：main/gyro_calibration.c 静止窗口最短2000→3000ms，各轴窗口max-min阈值1→5°/s；main/main.c启动日志同步。测试同步新增新阈值及时间边界。
+保留：至少200个独立有效样本；各轴原始角速度绝对值<=5°/s；重力幅值900–1100mg；各轴加速度波动<=30mg；样本间隔超过250ms则重新采样；NaN/Inf/无效读取不通过。所有条件满足才完成校准，并非开机3秒自动跳过。
+校准只在启动完成一次；正常运行/飞行中不重新学习偏置。姿态有效/起飞条件、NRF自动连接联锁、无线协议、飞控代码和固件均不调整。
+测试：test_gyro_calibration 使用3秒301样本基准检查偏置与进度；5°/s整边界允许、超过5拒绝；2999/3000ms精确时间边界；200样本最低计数、重复时间戳、间断/250ms调度容忍、时间回绕、各轴超限、重力范围、NaN/Inf及完成后不重校。
+回归：test_hand_feedback/test_tx_control/test_flight_keys/test_estop_cooldown；含原地面避障、3秒脉冲不重复延长、地面左右报警、锁定通信、急停10秒。
+工具：Windows PowerShell、ESP-IDF v6.0.3、idf6.0_py3.11_env、Xtensa esp-15.2.0_20251204。ASCII增量源码 D:/Espressif/sources/ground-tilt-20261006/hand，输出 D:/Espressif/builds/hand-ground-tilt-20261006；本次精确源码哈希见日志目录source-snapshot.json。
+构建：D:/Espressif/logs/imu-startup-3s-20261007/build.ps1，使用既有SDK配置、16MB Flash及2MB factory分区，不调整分区。
+版本管理：修改前标签 backup/hand-imu-3s-before-20261007（7a43def）。新提交及发布标签见 D:/Espressif/releases/hand-imu-3s-5dps-20261007/manifest.json。
+备份：D:/Espressif/logs/imu-startup-3s-20261007/before-source.bundle；before-runtime-region.bin实际回读包含bootloader/分区/NVS/应用，before-app.bin与原机应用逐字节比对一致。
+烧录：先确认无起飞状态、GPIO10松开；只写应用0x10000并执行verify-flash。NVS不在擦写范围，不强行恢复旧运行校准数据。
+回退：代码git revert本次提交；飞机落地断电、手控GPIO10松开时运行发布目录rollback-hand.ps1，恢复原应用（7a43def）并校验，保留NVS。代码回退不会自动改变已烧录设备。
+验证：编译/烧录及实物启动校准结果见发布manifest.json和acceptance-result.json；佩戴仍超过任何保留条件会重启校准，不能把阈值调整或模拟测试当作佩戴必然成功。
+状态灯：GPIO12需飞机新鲜回传且无链路告警；GPIO13需摄像头上传确认。IMU校准完成后自动连接才开始，飞机未上电或摄像头未连接时，不保证两灯同时亮。
+测试全程不发送解锁/起飞指令。GPIO11未捕获按键事件是既有独立待核对事项，本次未修改该按键逻辑。

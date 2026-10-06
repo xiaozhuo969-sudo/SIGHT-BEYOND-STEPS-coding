@@ -2,7 +2,8 @@
 #include <math.h>
 
 #define REQUIRED_SAMPLES 200U
-#define STILL_TIME_MS 2000U
+#define STILL_TIME_MS 3000U
+#define GYRO_WINDOW_SPAN_DPS 5.0f
 
 void gyro_calibration_restart(gyro_calibration_t *s, unsigned state)
 {
@@ -41,7 +42,7 @@ bool gyro_calibration_update(gyro_calibration_t *s, const float a[3], const floa
             s->gyro_max[i]=fmaxf(s->gyro_max[i],g[i]);
             s->accel_min[i]=fminf(s->accel_min[i],a[i]);
             s->accel_max[i]=fmaxf(s->accel_max[i],a[i]);
-            if(s->gyro_max[i]-s->gyro_min[i]>1.0f || s->accel_max[i]-s->accel_min[i]>30.0f) {
+            if(s->gyro_max[i]-s->gyro_min[i]>GYRO_WINDOW_SPAN_DPS || s->accel_max[i]-s->accel_min[i]>30.0f) {
                 gyro_calibration_restart(s,GYRO_CAL_MOVING);return false;
             }
         }

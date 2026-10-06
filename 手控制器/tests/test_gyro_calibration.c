@@ -8,14 +8,14 @@ static const float bias[3] = {0.25f, -0.5f, 0.75f};
 
 static void stationary_window(gyro_calibration_t *s, const float accel[3], uint32_t start)
 {
-    for (unsigned i=0; i<=200; ++i) {
+    for (unsigned i=0; i<=300; ++i) {
         // Realistic, zero-mean noise around known offsets.
-        const float n = i==200 ? 0 : (i%2 ? -0.0625f : 0.0625f);
+        const float n = i==300 ? 0 : (i%2 ? -0.0625f : 0.0625f);
         const float gyro[3] = {bias[0]+n, bias[1]-n, bias[2]+n};
-        assert(gyro_calibration_update(s, accel, gyro, start+i*10) == (i==200));
-        assert(gyro_calibration_progress(s) == i/2);
+        assert(gyro_calibration_update(s, accel, gyro, start+i*10) == (i==300));
+        assert(gyro_calibration_progress(s) == i/3);
     }
-    assert(s->state == GYRO_CAL_READY && s->count == 201);
+    assert(s->state == GYRO_CAL_READY && s->count == 301);
     for (unsigned i=0; i<3; ++i) {
         assert(fabsf(s->bias[i]-bias[i]) < 0.00001f);
         assert(fabsf(bias[i]-s->bias[i]) < 0.00001f); // Corrected stationary rate.
@@ -32,7 +32,7 @@ int main(void)
     gyro_calibration_restart(&s, GYRO_CAL_ERROR);
     const float moving[3] = {90, -80, 100};
     assert(gyro_calibration_update(&s, level, moving, 4000));
-    assert(s.count == 201 && s.bias[1] == bias[1]);
+    assert(s.count == 301 && s.bias[1] == bias[1]);
 
     // An arbitrary stationary mounting angle and uint32 timestamp wrap are valid.
     s = (gyro_calibration_t){0};
@@ -63,9 +63,10 @@ int main(void)
     // Each axis participates in motion detection, and failures clear all sums.
     for (unsigned axis=0; axis<3; ++axis) {
         s = (gyro_calibration_t){0};
-        assert(!gyro_calibration_update(&s, level, bias, 0));
+        const float lower[3] = {-2.5f,-2.5f,-2.5f};
+        assert(!gyro_calibration_update(&s, level, lower, 0));
         float g[3] = {bias[0], bias[1], bias[2]};
-        g[axis] += 1.1f;
+        g[axis] = 2.5001f;
         assert(!gyro_calibration_update(&s, level, g, 10));
         assert(s.state == GYRO_CAL_MOVING && s.count == 0);
         stationary_window(&s, level, 20);
@@ -93,6 +94,19 @@ int main(void)
         assert(!gyro_calibration_update(&s, a, bias, 0));
         assert(s.state == GYRO_CAL_MOVING && s.count == 0);
     }
-    puts("gyro_calibration tests passed");
+    /* A 5 dps peak-to-peak window, formerly rejected at 1 dps, is accepted. */
+    s = (gyro_calibration_t){0};
+    for(unsigned i=0;i<=300;++i) {
+        const float n=i==300 ? 0 : i%2 ? -2.5f : 2.5f;
+        const float g[3]={n,-n,n};
+        assert(gyro_calibration_update(&s,level,g,i*10)==(i==300));
+    }
+    for(unsigned i=0;i<3;++i) assert(fabsf(s.bias[i])<0.00001f);
+    /* More than 200 samples cannot bypass the exact 3-second time boundary. */
+    s=(gyro_calibration_t){0};
+    for(unsigned i=0;i<300;++i) assert(!gyro_calibration_update(&s,level,bias,i*10));
+    assert(!gyro_calibration_update(&s,level,bias,2999));
+    assert(gyro_calibration_update(&s,level,bias,3000));
+    puts("gyro_calibration 3s/5dps tests passed");
     return 0;
 }

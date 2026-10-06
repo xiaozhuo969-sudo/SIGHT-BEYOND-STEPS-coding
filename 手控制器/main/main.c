@@ -77,7 +77,7 @@ void app_main(void)
     ESP_ERROR_CHECK(qmi8658_enable_sensors(&imu, QMI8658_ENABLE_ACCEL | QMI8658_ENABLE_GYRO));
     vTaskDelay(pdMS_TO_TICKS(250));  // Allow the gyroscope to settle.
 
-    ESP_LOGI(TAG, "Gyro startup calibration: keep hand controller flat and still for 2 seconds");
+    ESP_LOGI(TAG, "Gyro startup calibration: hold steady for 3 seconds; gyro span <=5 dps per axis");
     gyro_calibration_t calibration = {0};
     float roll = 0.0f;
     float pitch = 0.0f;
