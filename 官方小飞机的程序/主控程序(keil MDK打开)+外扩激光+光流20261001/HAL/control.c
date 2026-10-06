@@ -184,14 +184,16 @@ void HeightPidControl(float dt)
  ***************************************************************/
 
 
+volatile uint8_t flow_control_status=WAITING_1;
+volatile uint16_t flow_target_captures;
 void FlowPidControl(float dt)
 {
-	volatile static uint8_t status=WAITING_1;
+	/* State exported for read-only diagnostics. */
 	static uint8_t set_pos = 0;
 
 	//----------------------------------------------紧急终止飞行
 	if(ALL_flag.unlock == EMERGENT) //意外情况，请使用遥控紧急上锁，飞控就可以在任何情况下紧急中止飞行，锁定飞行器，退出PID控制
-		status = EXIT_255;
+		flow_control_status = EXIT_255;
 	//----------------------------------------------控制
     /* An invalid estimate is not a measured position of zero. Forget the
      * old target/PID history and recapture the recovered coordinate frame. */
@@ -199,26 +201,26 @@ void FlowPidControl(float dt)
                             !flow_position_ready())) {
         pidRest(&pPidObject[8],4);
         set_pos = 1;
-        status = WAITING_2;
+        flow_control_status = WAITING_2;
         if (ALL_flag.flow_control) {
             pidRoll.desired = 0;
             pidPitch.desired = 0;
         }
         return;
     }
-	switch(status)
+	switch(flow_control_status)
 	{
 		case WAITING_1:		
 			if(ALL_flag.unlock) //检测解锁
 			{
-					status = WAITING_2;	
+					flow_control_status = WAITING_2;	
 			}
 			break;
 		case WAITING_2: //当油门大于1300  即默认为起飞后进入定点控制
 			if(ALL_flag.flow_control&&VL53L01_high>200) 
 			{
 				pidRest(&pPidObject[8],4);  //复位上次遗留下来的PID数据
-				status = PROCESS_31;
+				flow_control_status = PROCESS_31;
 				set_pos = 1;
 			}			
 			break;
@@ -244,6 +246,7 @@ void FlowPidControl(float dt)
 					{
 						set_pos = 0; 		//关闭记录位置标志
 
+						++flow_target_captures;
 						pidPositionX.desired = flow_x_lpf_att_i;
 						pidPositionY.desired = flow_y_lpf_att_i;	
 					}
@@ -271,16 +274,16 @@ void FlowPidControl(float dt)
 				if(!ALL_flag.flow_control||!ALL_flag.height_lock)
 				{
 			
-					status = EXIT_255;
+					flow_control_status = EXIT_255;
 				}
 			}
 			break;	
 		case EXIT_255: //退出定点
 			pidRest(&pPidObject[8],4);	
-			status = WAITING_1;
+			flow_control_status = WAITING_1;
 			break;
 		default:
-			status = WAITING_1;
+			flow_control_status = WAITING_1;
 			break;		
 	}
 }

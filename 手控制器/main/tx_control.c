@@ -203,13 +203,20 @@ void tx_feedback(tx_control_t *s, const uint8_t packet[32], uint32_t now)
     hc_packet_t p;
     if (!s->v2 || s->phase==TX_OFF || s->phase==TX_FAULT) return;
     if (!hc_decode(packet,&p) || p.version!=(s->v3?3:2) ||
-        (p.command!=HC_STATUS&&p.command!=HC_DETAIL&&p.command!=HC_DIAGNOSTICS&&p.command!=HC_TELEMETRY)) {
+        (p.command!=HC_STATUS&&p.command!=HC_DETAIL&&p.command!=HC_DIAGNOSTICS&&p.command!=HC_TELEMETRY&&!fd_command(p.command))) {
         ++s->rejected_schema;return;
     }
     if (p.session!=s->session) { ++s->rejected_session;return; }
     if ((uint16_t)(s->sequence-p.sequence)>16 ||
         (s->feedback&&!hc_newer(p.sequence,s->feedback_sequence))) {
         ++s->rejected_sequence;return;
+    }
+    if(s->flow.seen && !hc_newer(p.sequence,s->flow.sequence)) {
+        ++s->rejected_sequence;return;
+    }
+    if(fd_command(p.command)) {
+        if(!fd_receive(&s->flow,p.command,p.channels,p.height,p.sequence,now)) ++s->rejected_schema;
+        return; /* No flight-state, heartbeat, guard or alarm side effects. */
     }
     link_health(s,now);
     // Only a fresh, matching aircraft STATUS counts as a received reply.

@@ -26,6 +26,9 @@ extern float flow_y_vel_lpf_i;
 extern void flow_data_sins(void);
 /* Valid, fresh horizontal estimate after the recovery dwell. */
 extern uint8_t flow_position_ready(void);
+extern uint16_t flow_source_age_ms(void);
+extern uint8_t flow_source_good(void);
+extern volatile uint16_t flow_invalidations,flow_sample_count;
 extern void flow_sins_rest(void);
 extern uint32_t VL53L01_high; //当前高度
 extern void flow_get_data(void);

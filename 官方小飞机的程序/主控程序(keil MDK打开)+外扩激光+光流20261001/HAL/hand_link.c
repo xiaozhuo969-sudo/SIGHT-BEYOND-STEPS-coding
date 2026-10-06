@@ -181,6 +181,8 @@ void hand_link_motor_observe(void) {
  if(!isfinite(c)) {locked(HC_IMU);return;}
  hand_link.collective=(uint32_t)(c<0?0:c>800?800:c);
 }
+#include "flow_diagnostics_tx.h"
+
 static void make_reply(const hc_packet_t *p) {
  hc_packet_t s={.version=3,.command=HC_STATUS,.session=p->session,.sequence=p->sequence};
  s.channels[0]=(ALL_flag.unlock?1:0)|(ALL_flag.height_lock?2:0)|(ALL_flag.flow_control?16:0);
@@ -217,7 +219,7 @@ bool hand_link_receive(const uint8_t raw[32]) {
   }
   remote_reset_session();
   hand_link.session=p.session;hand_link.lock_ms=hand_milliseconds;hand_link.arm_latched=0;
-  telemetry_at=hand_milliseconds;reply_pending=false;
+  telemetry_at=hand_milliseconds;reply_pending=false;flight_diag_reset();
  } else if(!hc_newer(p.sequence,(uint16_t)hand_link.sequence))goto out;
  else {
   hand_link.rx_gap_ms=elapsed(hand_link.last_ms);
@@ -321,6 +323,11 @@ void hand_link_poll(void) {
    hc_put16(reply+30,hc_crc(reply,30));
    /* Keep the 300ms clock phase across 50ms-slot jitter; never catch up in bursts. */
    telemetry_at+=((uint32_t)(now-telemetry_at)/HC_TELEMETRY_INTERVAL_MS)*HC_TELEMETRY_INTERVAL_MS;
+   fd_last_reply=false;
+  } else if(flight_diag_due(now)) {
+   flight_diag_reply(reply,now);
+  } else {
+   flight_diag_regular_reply(reply);
   }
   leave_critical(key);
   CE_LOW();NRF24L01_Write_Reg(SPI_WRITE_REG+STATUS,0x30);

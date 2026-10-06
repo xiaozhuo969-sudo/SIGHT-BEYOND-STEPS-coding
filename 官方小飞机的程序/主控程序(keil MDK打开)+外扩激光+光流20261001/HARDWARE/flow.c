@@ -54,9 +54,16 @@ float last_flow_pos_y_i;
 static uint32_t flow_sample_ms, flow_good_since;
 static uint8_t flow_sample_seen, flow_sample_good, flow_recovering;
 static uint8_t flow_position_valid;
+volatile uint16_t flow_invalidations,flow_sample_count;
+uint16_t flow_source_age_ms(void) {
+    uint32_t age=hand_milliseconds-flow_sample_ms;
+    return !flow_sample_seen || age>65534 ? 65535 : (uint16_t)age;
+}
+uint8_t flow_source_good(void) {return flow_sample_seen && flow_sample_good;}
 
 static void flow_invalidate(void)
 {
+    if(flow_position_valid)++flow_invalidations;
     flow_position_valid = 0;
     flow_recovering = 0;
 }
@@ -166,6 +173,7 @@ void flow_get_data(void)
 
 			flow_data.squal = temp_data[4];
 			 high = ((u32)temp_data[0]<<8) | ((u16)temp_data[1]) ;   //¼¤¹â¸ß¶È
+            ++flow_sample_count;
             flow_sample_seen = 1;
             flow_sample_ms = hand_milliseconds;
             flow_sample_good = flow_data.squal > FLOW_QUALITY_MIN &&

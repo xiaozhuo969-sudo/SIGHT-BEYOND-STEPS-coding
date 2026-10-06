@@ -17,6 +17,7 @@
 #include "gyro_calibration.h"
 #include "control_output.h"
 #include "tx_control.h"
+#include "flow_diag_log.h"
 #include "flight_keys.h"
 #include "led_demo.h"
 #include "esp_random.h"
@@ -442,6 +443,7 @@ static void telemetry_task(void *arg)
                "\"air_telem_received\":%u,\"air_attitude_valid\":%u,\"air_pitch_cdeg\":%d,\"air_roll_cdeg\":%d,"
                "\"air_distance_valid\":%u,\"air_distance_cm\":%u,\"air_telem_age_ms\":%ld,"
                "\"air_telem_frames\":%lu,\"air_telem_gap_ms\":%lu,\"air_telem_max_gap_ms\":%lu,"
+               "\"fd_received\":%u,\"fd_age_ms\":%ld,\"fd_valid\":%u,"
                "\"out\":[%u,%u,%u,%u,%u,%u,%u,%u],\"out_hex\":\"%s\"}\n",
                (unsigned long)(esp_timer_get_time() / 1000), state.imu, state.pitch,
                state.roll, state.imu_cal, state.imu_cal_progress,
@@ -486,7 +488,10 @@ static void telemetry_task(void *arg)
                tx.air_distance_valid,tx.air_distance_cm,
                tx.telemetry?(long)(uint32_t)((uint32_t)(now/1000)-tx.telemetry_ms):-1L,
                (unsigned long)tx.air_telem_frames,(unsigned long)tx.air_telem_gap_ms,(unsigned long)tx.air_telem_max_gap_ms,
+               tx.flow.seen,tx.flow.seen?(long)fd_age(&tx.flow,(uint32_t)(now/1000)):-1L,
+               fd_complete_fresh(&tx.flow,(uint32_t)(now/1000)),
                output[0], output[1], output[2], output[3], output[4], output[5], output[6], output[7], output_hex);
+        flow_diag_log(&tx.flow,tx.session,(uint32_t)(now/1000));
         xTaskDelayUntil(&publish_at, pdMS_TO_TICKS(100));
     }
 }

@@ -2,6 +2,7 @@
 #include <stdbool.h>
 #include <stdint.h>
 #include "hand_feedback.h"
+#include "../../shared/flow_diagnostics.h"
 
 /* Keep published phase IDs stable; obsolete stick-unlock phases are removed. */
 enum { TX_OFF=0, TX_READY=1, TX_STOPPING=9, TX_FAULT=10, TX_ARM_REQUEST=11,
@@ -10,6 +11,7 @@ enum { TX_OFF=0, TX_READY=1, TX_STOPPING=9, TX_FAULT=10, TX_ARM_REQUEST=11,
 enum { TX_REASON_NONE, TX_REASON_STOP, TX_REASON_HEARTBEAT, TX_REASON_IMU, TX_REASON_RADIO,
        TX_REASON_FEEDBACK, TX_REASON_ARM_TIMEOUT, TX_REASON_AIR_LOCK };
 typedef struct {
+    flow_diagnostics_t flow;
     unsigned phase, reason, sent;
     bool estop_active;
     bool estop_new_session;

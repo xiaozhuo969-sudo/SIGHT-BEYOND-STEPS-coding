@@ -3,6 +3,7 @@
 #include <stdint.h>
 #include <stdbool.h>
 #include <string.h>
+#include "flow_diagnostics.h"
 
 /* HC v2/v3: 32 bytes, big endian, CRC-16/CCITT-FALSE over bytes 0..29.
  * Version 3 is explicit altitude control; it never changes v2 throttle semantics. */
@@ -50,10 +51,12 @@ static inline bool hc_decode(const uint8_t p[32],hc_packet_t *v) {
     if(p[2]==2) {
         if(p[27]||p[28]||p[29]||p[26]>1||(p[3]>HC_DISARM&&p[3]!=HC_STATUS)) return false;
     } else {
-        bool reply=p[3]==HC_STATUS||p[3]==HC_DETAIL||p[3]==HC_DIAGNOSTICS||p[3]==HC_TELEMETRY;
+        bool diagnostic=fd_command(p[3]);
+        bool reply=p[3]==HC_STATUS||p[3]==HC_DETAIL||p[3]==HC_DIAGNOSTICS||p[3]==HC_TELEMETRY||diagnostic;
         if(p[26]>3||(!reply&&p[3]>HC_RESUME)) return false;
         if(!reply&&(p[27]||p[28]||p[29])) return false;
-        if(reply&&((p[27]&0x10)||(p[27]&0x0f)>HC_STAGE_MANUAL)) return false;
+        if(diagnostic) {if(p[26]!=1 || p[27]!=0) return false;}
+        else if(reply&&((p[27]&0x10)||(p[27]&0x0f)>HC_STAGE_MANUAL)) return false;
         if(p[3]==HC_TELEMETRY) {
             int16_t pitch=(int16_t)hc_get16(p+20),roll=(int16_t)hc_get16(p+22);
             uint16_t distance=hc_get16(p+24);
@@ -66,6 +69,7 @@ static inline bool hc_decode(const uint8_t p[32],hc_packet_t *v) {
     if(!v->session) return false;
     v->sequence=hc_get16(p+8);v->assist=p[26];
     for(unsigned i=0;i<8;i++) v->channels[i]=hc_get16(p+10+2*i);
+    if(fd_command(v->command) && !fd_payload_valid(v->command,v->channels)) return false;
     return true;
 }
 static inline bool hc_newer(uint16_t a,uint16_t b) { uint16_t d=(uint16_t)(a-b);return d!=0&&d<0x8000; }

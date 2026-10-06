@@ -255,7 +255,7 @@ check('one reply per 50ms uplink remains',len(frames)==43 and all(b[0]-a[0]==50 
 check('telemetry sent every 300ms in existing reply slot',len(tele)==7 and tele[0][0]==2320 and all(b[0]-a[0]==300 for a,b in zip(tele,tele[1:])))
 check('telemetry signed centidegrees match aircraft Angle',all(-1235<=struct.unpack('>h',b[20:22])[0]<=-1233 and 5677<=struct.unpack('>h',b[22:24])[0]<=5679 for _,b in tele))
 check('placeholder range invalid and CRC correct',all(b[24:27]==b'\xff\xff\x01' and int.from_bytes(b[30:32],'big')==crc16(b[:30]) for _,b in tele))
-check('common reply fields retain locked DISARM confirmation',all(b[10:12]==b'\0\0' and b[16:18]==b'\0\2' for _,b in frames))
+check('common reply fields retain locked DISARM confirmation',all(b[10:12]==b'\0\0' and b[16:18]==b'\0\2' for _,b in frames if b[3]<0x84))
 check('ordinary status no longer publishes unvalidated angles',all(b[20:24]==bytes(4) for _,b in frames if b[3]==0x80))
 for idx,(pitch,roll,imu_ok,imu_age) in enumerate(((float('nan'),0,1,0),(0,float('inf'),1,0),(181,0,1,0),(0,0,0,0),(0,0,1,101))):
  t=4400+idx*350;m.now(t);m.h('imu_ok',imu_ok);m.h('imu_ms',t+20-imu_age);m.put('Angle','3f',roll,pitch,0);m.send(2,100+idx);poll_reply(m,t+20)
