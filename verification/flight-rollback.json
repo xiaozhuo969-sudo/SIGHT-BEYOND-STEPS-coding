@@ -1,0 +1,33 @@
+{
+  "date": "2026-10-06",
+  "pre_rollback_commit": "d8521865765307bee9ecbc6e01a29cf28684d13c",
+  "baseline_commit": "0cc2518de617a76a5237e46c2fae7e3bdadaf9f0",
+  "backup": "E:\\APP\\flay_111\\小飞机_本地备份\\2026-10-06-before-flight-rollback-172830",
+  "restored_files": [
+    {
+      "path": "官方小飞机的程序/主控程序(keil MDK打开)+外扩激光+光流20261001/HAL/hand_link.c",
+      "before_sha256": "0adb0b12acc4a643451a51c69fdfa3592613faf0ef1ce5eeef58dd7d89a073d3",
+      "restored_sha256": "187d91a2d2e9b7928e05e0f9c7634f4620a5b0dba8fc863762e95c6ae4ad016b"
+    },
+    {
+      "path": "官方小飞机的程序/主控程序(keil MDK打开)+外扩激光+光流20261001/port/build.py",
+      "before_sha256": "902751c0762c7c134edf73aeadca054f5f97ddbddca67e28ca303c000f4615b2",
+      "restored_sha256": "c4bc45043443e0a3f8442b28788c51d36ea29e84eec7be41b816f73b6e8da40b"
+    },
+    {
+      "path": "官方小飞机的程序/主控程序(keil MDK打开)+外扩激光+光流20261001/port/verify.py",
+      "before_sha256": "466d8476f53a262ee154d75f6af075b2c08782ed7cc8dca94f40ab02aff09d88",
+      "restored_sha256": "481d9f59d3bd18ef629b6c66949a15f8cc7ee9739d4e38830cdb6546b05ef97d"
+    },
+    {
+      "path": "shared/hand_protocol.h",
+      "before_sha256": "96f2c7379a7ea466d6e9af4273f28d94c22e29422bfc2fc808262799d9320d85",
+      "restored_sha256": "6551e6316ed6b1fac6185cfc32d93f84957015cf318b94c34e6a0fcfccff6511"
+    }
+  ],
+  "flight_baseline_files_verified": 150,
+  "hand_source_edited": false,
+  "hardware_flashed": false,
+  "state": "HAND_ONLY_PLAN_PENDING: hand source still references removed protocol extensions; not a compilable or deployable release until confirmed hand-only adjustment.",
+  "prior_test_results": "Historical only; do not apply to this transitional tree."
+}

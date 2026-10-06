@@ -1,6 +1,9 @@
 param([ValidateSet('Hand','Flight','All','Test')] [string]$Target='All')
 $ErrorActionPreference='Stop'
 $projectRoot=Split-Path -Parent $PSScriptRoot
+if(Test-Path -LiteralPath "$projectRoot\verification\hand-only-pending.txt") {
+    throw 'Flight rollback complete; hand-only redesign is pending confirmation. This transitional tree must not be built as a release.'
+}
 $installRoot='D:\Espressif'
 $env:PYTHONUTF8='1'
 $env:IDF_TOOLS_PATH="$installRoot\tools"

@@ -4,9 +4,16 @@ param(
     [switch]$CheckOnly
 )
 $ErrorActionPreference='Stop'
+$projectRoot=Split-Path -Parent $PSScriptRoot
+if(Test-Path -LiteralPath "$projectRoot\verification\hand-only-pending.txt") {
+    throw 'Hand-only redesign pending confirmation. Previous two-sided firmware is superseded; flashing is disabled.'
+}
 $python='D:\Espressif\tools\python_env\idf6.0_py3.11_env\Scripts\python.exe'
 if(!(Test-Path -LiteralPath $python)){ throw 'ESP-IDF Python environment not found.' }
 $firmwareRoot=(Resolve-Path -LiteralPath $FirmwareDirectory).Path
+if(Test-Path -LiteralPath (Join-Path (Split-Path -Parent $firmwareRoot) 'DO_NOT_FLASH.txt')) {
+    throw 'This firmware package is superseded. Read DO_NOT_FLASH.txt in its parent directory.'
+}
 $manifest=Get-Content -LiteralPath (Join-Path $firmwareRoot 'sha256.json') -Raw | ConvertFrom-Json
 $files=@('bootloader/bootloader.bin','partition_table/partition-table.bin','hand_controller_imu.bin')
 foreach($file in $files){

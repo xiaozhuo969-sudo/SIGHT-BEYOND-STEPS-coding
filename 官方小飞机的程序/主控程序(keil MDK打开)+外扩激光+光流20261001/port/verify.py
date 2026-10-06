@@ -1,20 +1,19 @@
 #!/usr/bin/env python3
 """Execute the actual Thumb images offline; never access SWD, USB or motors."""
 from pathlib import Path
-import sys,struct,json,hashlib,random,os
+import sys,struct,json,hashlib,random
 sys.path.insert(0,str(Path.home()/'.cache/codex-tools/firmware-python'))
 from unicorn import Uc,UC_ARCH_ARM,UC_MODE_THUMB,UC_MODE_MCLASS,UC_HOOK_CODE
 from unicorn.arm_const import *
 from elftools.elf.elffile import ELFFile
-ROOT=Path(os.environ.get('FLIGHT_ROOT',Path(__file__).resolve().parents[1]))
-BUILD=Path(os.environ.get('FLIGHT_BUILD_DIR',ROOT/'Output/gcc'))
+ROOT=Path(__file__).resolve().parents[1]
 FIELDS='owned active session sequence received bad last_ms lock_ms reason first_event last_fault rx_gap_ms rx_max_gap_ms imu_ms imu_ok height_ms height_frames height_mm height_ok stage arm_latched stage_ms ground_mm ground_set assist recovery_since recovery_ready neutral_seen collective radio_faults radio_ready replies reply_failures control_us last_control_us max_control_us overruns'.split()
 def fb(x):return struct.unpack('<I',struct.pack('<f',x))[0]
 class Machine:
  def __init__(self,original=False):
   self.original=original;self.u=Uc(UC_ARCH_ARM,UC_MODE_THUMB|UC_MODE_MCLASS)
   for a,n in [(0x08000000,0x20000),(0x20000000,0x10000),(0x40000000,0x30000),(0xe0000000,0x100000)]:self.u.mem_map(a,n)
-  path=ROOT/'Output/mini.axf' if original else BUILD/'official_hand.elf'
+  path=ROOT/('Output/mini.axf' if original else 'Output/gcc/official_hand.elf')
   with path.open('rb') as f:
    e=ELFFile(f);self.sym={s.name:s['st_value'] for s in e.get_section_by_name('.symtab').iter_symbols() if s['st_value']}
    for s in e.iter_segments():
@@ -54,13 +53,8 @@ class Machine:
   return self.get('hand_link','I',offset=off)[0]
  def now(self,n):self.put('hand_milliseconds','I',n)
  def rc(self,*vals):self.put('Remote','8H',*(list(vals)+[1000]*(8-len(vals))))
- def tick(self,now,mm=None,front=200):
-  self.now(now)
-  if front is not None:
-   b=bytearray([0x5a,0x5a,0x45,2,front>>8,front&255]);b.append(sum(b)&255)
-   for x in b:self.call('obstacle_receive_byte',x)
-  else:self.put('obstacle','I',0,offset=24)
-  self.h('last_ms',now);self.call('hand_link_imu',1)
+ def tick(self,now,mm=None):
+  self.now(now);self.h('last_ms',now);self.call('hand_link_imu',1)
   if mm is not None:
    self.call('hand_link_height',1,mm)
    if mm:self.put('VL53L01_high','I',mm)
@@ -261,7 +255,7 @@ check('one reply per 50ms uplink remains',len(frames)==43 and all(b[0]-a[0]==50 
 check('telemetry sent every 300ms in existing reply slot',len(tele)==7 and tele[0][0]==2320 and all(b[0]-a[0]==300 for a,b in zip(tele,tele[1:])))
 check('telemetry signed centidegrees match aircraft Angle',all(-1235<=struct.unpack('>h',b[20:22])[0]<=-1233 and 5677<=struct.unpack('>h',b[22:24])[0]<=5679 for _,b in tele))
 check('placeholder range invalid and CRC correct',all(b[24:27]==b'\xff\xff\x01' and int.from_bytes(b[30:32],'big')==crc16(b[:30]) for _,b in tele))
-check('common reply fields retain locked DISARM confirmation',all(int.from_bytes(b[10:12],'big')&0x1f==0 and b[16:18]==b'\0\2' for _,b in frames))
+check('common reply fields retain locked DISARM confirmation',all(b[10:12]==b'\0\0' and b[16:18]==b'\0\2' for _,b in frames))
 check('ordinary status no longer publishes unvalidated angles',all(b[20:24]==bytes(4) for _,b in frames if b[3]==0x80))
 for idx,(pitch,roll,imu_ok,imu_age) in enumerate(((float('nan'),0,1,0),(0,float('inf'),1,0),(181,0,1,0),(0,0,0,0),(0,0,1,101))):
  t=4400+idx*350;m.now(t);m.h('imu_ok',imu_ok);m.h('imu_ms',t+20-imu_age);m.put('Angle','3f',roll,pitch,0);m.send(2,100+idx);poll_reply(m,t+20)
@@ -320,43 +314,6 @@ raw=m.radio_sent[-1][1]
 check('obstacle transmitted in real HC3 telemetry with valid bit and CRC',raw[3]==0x83 and raw[24:26]==b'\x00\xc4' and raw[26]&2 and int.from_bytes(raw[30:32],'big')==crc16(raw[:30]))
 m.now(1950);m.send(2,3);poll_reply(m,1970);raw=m.radio_sent[-1][1]
 check('stale obstacle clears HC3 distance valid bit',raw[3]==0x83 and raw[24:26]==b'\xff\xff' and raw[26]&2==0)
-# Execute the integrated front guard against the real Thumb image.
-m=armed();m.send(3,3)
-for t in range(1602,2400,3):m.tick(t,300)
-m.send(0,4,channels=[1300,1700,1800,1700,2000,1000,1000,1000])
-m.tick(2400,300,front=101);check('outside 1m retains commanded movement',m.get('Remote','8H')[1]==1800)
-m.put('pidRoll','f',3.5);m.put('pidPitch','f',-2.5)
-m.tick(2403,300,front=100)
-check('at 1m neutralizes horizontal yaw and vertical gestures',m.get('Remote','8H')[:4]==(1500,1500,1500,1500))
-check('guard preserves native optical-flow attitude outputs',m.get('pidRoll','f')[0]==3.5 and m.get('pidPitch','f')[0]==-2.5)
-check('guard does not disable altitude or optical flow',m.get('ALL_flag','B')[0]&19==19)
-m.send(6,5);check('button while obstacle present rejected',m.h('reason')==13)
-for t in range(2406,2910,3):m.tick(t,300,front=130)
-m.send(0,6,channels=[1500,1700,1800,1500,2000,1000,1000,1000]);m.tick(2910,300,front=130)
-check('clear range does not automatically resume gestures',m.get('Remote','8H')[:4]==(1500,1500,1500,1500))
-m.send(6,7);check('single explicit confirmation clears hold',m.h('reason')==0)
-m.send(0,8,channels=[1500,1700,1500,1500,2000,1000,1000,1000]);m.tick(2913,300,front=130)
-check('normal control resumes without a flat-hand dwell',m.get('Remote','8H')[1]==1800)
-m.tick(2916,300,front=None);check('unknown range blocks forward',m.get('Remote','8H')[1]==1500)
-m.send(0,9,channels=[1500,1300,1500,1500,2000,1000,1000,1000]);m.tick(2919,300,front=None)
-check('unknown front range permits retreat',m.get('Remote','8H')[1]==1200)
-m.tick(2922,300,front=90);m.send(4,10);m.tick(2925,300,front=90)
-check('explicit landing retains priority during obstacle hold',m.h('stage')==4 and m.get('Remote','8H')[2]==1100)
-m.send(2,11);check('stop retains immediate priority during obstacle hold',m.pwm()==(0,0,0,0))
-
-m=armed();m.send(3,3)
-for t in range(1602,2400,3):m.tick(t,300)
-m.put('Angle','f',31,offset=4) # Angle.pitch; roll/pitch either axis is sufficient
-for t in range(2400,2601,3):m.tick(t,300)
-m.send(0,4);flags=int.from_bytes(m.u.mem_read(m.sym['reply']+10,2),'big')
-check('aircraft tilt is not reported before 200ms',flags&0x80==0)
-m.tick(2601,300);m.send(0,5);flags=int.from_bytes(m.u.mem_read(m.sym['reply']+10,2),'big')
-check('real 3ms loop reports excessive aircraft tilt after 200ms',flags&0x80!=0)
-m.put('Angle','3f',0,0,0)
-for t in range(2601,3105,3):m.tick(t,300)
-m.send(0,6);flags=int.from_bytes(m.u.mem_read(m.sym['reply']+10,2),'big')
-check('aircraft tilt clears after 500ms below 25 degrees',flags&0x80==0)
-
-result={'passed':len(checks),'failed':0,'hardware_access':False,'tests':checks,'firmware_sha256':hashlib.sha256((BUILD/'official_hand.template.bin').read_bytes()).hexdigest()}
-(BUILD/'verification.json').write_text(json.dumps(result,ensure_ascii=False,indent=2)+'\n')
+result={'passed':len(checks),'failed':0,'hardware_access':False,'tests':checks,'firmware_sha256':hashlib.sha256((ROOT/'Output/gcc/official_hand.template.bin').read_bytes()).hexdigest()}
+(ROOT/'Output/gcc/verification.json').write_text(json.dumps(result,ensure_ascii=False,indent=2)+'\n')
 print(json.dumps({k:v for k,v in result.items() if k!='tests'}))

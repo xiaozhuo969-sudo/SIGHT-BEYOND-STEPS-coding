@@ -1,3 +1,7 @@
+【已停用：2026-10-06】以下是旧双端方案的历史烧录说明，请勿继续照此烧录。
+当前改为原飞控不动、仅调整手控。新版手控方案尚待确认，未生成可烧录版本。
+详见工程 hand-only-adjustment-plan.txt。
+
 小飞机五路灯版本：feedback-leds-2026-10-06
 
 交付目录：D:\Espressif\releases\feedback-leds-2026-10-06
