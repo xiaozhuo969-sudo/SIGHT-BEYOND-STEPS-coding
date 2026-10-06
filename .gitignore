@@ -1,0 +1,38 @@
+# Generated build directories; the original files remain on disk.
+**/build/
+**/build-*/
+**/Output/
+**/Objects/
+**/Listings/
+**/managed_components/
+**/ghidra_project/
+**/__pycache__/
+**/.pytest_cache/
+**/.venv/
+**/venv/
+/相机/tmp/
+
+# Compiler and editor temporary files.
+*.o
+*.obj
+*.a
+*.crf
+*.d
+*.pyc
+*.pyo
+*.tmp
+*.TMP
+*.bak
+*.Bak
+*.uvguix.*
+*.uvoptx
+*.user
+*.swp
+*.swo
+*.log
+JLinkLog.txt
+JLinkSettings.ini
+Thumbs.db
+Desktop.ini
+
+# Do not ignore source archives, documents or original firmware backups.

@@ -1,0 +1,24 @@
+{
+  "source_sha256": "cbe3d9ff29cbe4ed8b158dc277fd6280a572135573af9f70b42d96420f9ad43d",
+  "unicorn_version": "2.1.4",
+  "result": "PASS",
+  "cases": {
+    "channel_cases": 600,
+    "packet_cases": 200,
+    "key_cases": 800,
+    "systick_cases": 256
+  },
+  "total_cases": 1856,
+  "validated": [
+    "ADC scaling, float filtering, wrap and clamp",
+    "32-byte packet including original adjacent-memory reads",
+    "key state, priority, trim bounds and EEPROM write requests",
+    "SysTick post-increment schedule"
+  ],
+  "not_validated": [
+    "electrical pin wiring",
+    "GPIO bit-bang timing",
+    "live radio and EEPROM",
+    "complete boot on hardware"
+  ]
+}

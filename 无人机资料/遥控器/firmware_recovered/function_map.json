@@ -1,0 +1,899 @@
+[
+  {
+    "decompiled": true, 
+    "address": "080000f4", 
+    "calls": [
+      "08000168 FUN_08000168"
+    ], 
+    "bytes": 44, 
+    "name": "FUN_080000f4"
+  }, 
+  {
+    "decompiled": true, 
+    "address": "08000128", 
+    "calls": [
+      "08000128 scatter_copy"
+    ], 
+    "bytes": 26, 
+    "name": "scatter_copy"
+  }, 
+  {
+    "decompiled": true, 
+    "address": "08000144", 
+    "calls": [], 
+    "bytes": 28, 
+    "name": "scatter_zero"
+  }, 
+  {
+    "decompiled": true, 
+    "address": "08000160", 
+    "calls": [], 
+    "bytes": 4, 
+    "name": "FUN_08000160"
+  }, 
+  {
+    "decompiled": true, 
+    "address": "08000164", 
+    "calls": [], 
+    "bytes": 4, 
+    "name": "FUN_08000164"
+  }, 
+  {
+    "decompiled": true, 
+    "address": "08000168", 
+    "calls": [
+      "08000160 FUN_08000160", 
+      "080001ce FUN_080001ce", 
+      "08000218 FUN_08000218", 
+      "08001c40 main"
+    ], 
+    "bytes": 18, 
+    "name": "FUN_08000168"
+  }, 
+  {
+    "decompiled": true, 
+    "address": "0800017a", 
+    "calls": [
+      "08000164 FUN_08000164", 
+      "0800022c FUN_0800022c"
+    ], 
+    "bytes": 14, 
+    "name": "FUN_0800017a"
+  }, 
+  {
+    "decompiled": true, 
+    "address": "08000188", 
+    "calls": [
+      "080018fc SystemInit"
+    ], 
+    "bytes": 8, 
+    "name": "Reset_Handler"
+  }, 
+  {
+    "decompiled": true, 
+    "address": "080001a2", 
+    "calls": [
+      "080001a2 Default_Handler"
+    ], 
+    "bytes": 2, 
+    "name": "Default_Handler"
+  }, 
+  {
+    "decompiled": true, 
+    "address": "080001a4", 
+    "calls": [], 
+    "bytes": 10, 
+    "name": "FUN_080001a4"
+  }, 
+  {
+    "decompiled": true, 
+    "address": "080001ce", 
+    "calls": [
+      "080001a4 FUN_080001a4", 
+      "08000224 FUN_08000224"
+    ], 
+    "bytes": 74, 
+    "name": "FUN_080001ce"
+  }, 
+  {
+    "decompiled": true, 
+    "address": "08000218", 
+    "calls": [
+      "0800017a FUN_0800017a"
+    ], 
+    "bytes": 12, 
+    "name": "FUN_08000218"
+  }, 
+  {
+    "decompiled": true, 
+    "address": "08000224", 
+    "calls": [], 
+    "bytes": 4, 
+    "name": "FUN_08000224"
+  }, 
+  {
+    "decompiled": true, 
+    "address": "0800022c", 
+    "calls": [], 
+    "bytes": 8, 
+    "name": "FUN_0800022c"
+  }, 
+  {
+    "decompiled": true, 
+    "address": "0800023c", 
+    "calls": [
+      "08000710 GPIO_Init", 
+      "080012e4 RCC_AHBPeriphClockCmd", 
+      "08001324 RCC_APB2PeriphClockCmd"
+    ], 
+    "bytes": 42, 
+    "name": "adc_gpio_init"
+  }, 
+  {
+    "decompiled": true, 
+    "address": "0800026c", 
+    "calls": [
+      "08000374 FUN_08000374", 
+      "0800038a FUN_0800038a", 
+      "080003a0 FUN_080003a0", 
+      "080003b4 FUN_080003b4", 
+      "080003c8 FUN_080003c8", 
+      "08000418 FUN_08000418", 
+      "080004d0 FUN_080004d0", 
+      "080004da FUN_080004da", 
+      "080004f0 FUN_080004f0", 
+      "08000538 FUN_08000538", 
+      "08000550 FUN_08000550", 
+      "0800069c FUN_0800069c", 
+      "080012cc RCC_ADCCLKConfig"
+    ], 
+    "bytes": 252, 
+    "name": "adc_dma_init"
+  }, 
+  {
+    "decompiled": true, 
+    "address": "08000374", 
+    "calls": [], 
+    "bytes": 22, 
+    "name": "FUN_08000374"
+  }, 
+  {
+    "decompiled": true, 
+    "address": "0800038a", 
+    "calls": [], 
+    "bytes": 22, 
+    "name": "FUN_0800038a"
+  }, 
+  {
+    "decompiled": true, 
+    "address": "080003a0", 
+    "calls": [], 
+    "bytes": 20, 
+    "name": "FUN_080003a0"
+  }, 
+  {
+    "decompiled": true, 
+    "address": "080003b4", 
+    "calls": [], 
+    "bytes": 20, 
+    "name": "FUN_080003b4"
+  }, 
+  {
+    "decompiled": true, 
+    "address": "080003c8", 
+    "calls": [], 
+    "bytes": 70, 
+    "name": "FUN_080003c8"
+  }, 
+  {
+    "decompiled": true, 
+    "address": "08000418", 
+    "calls": [], 
+    "bytes": 184, 
+    "name": "FUN_08000418"
+  }, 
+  {
+    "decompiled": true, 
+    "address": "080004d0", 
+    "calls": [], 
+    "bytes": 10, 
+    "name": "FUN_080004d0"
+  }, 
+  {
+    "decompiled": true, 
+    "address": "080004da", 
+    "calls": [], 
+    "bytes": 22, 
+    "name": "FUN_080004da"
+  }, 
+  {
+    "decompiled": true, 
+    "address": "080004f0", 
+    "calls": [], 
+    "bytes": 10, 
+    "name": "FUN_080004f0"
+  }, 
+  {
+    "decompiled": true, 
+    "address": "080004fc", 
+    "calls": [
+      "08000710 GPIO_Init", 
+      "08001324 RCC_APB2PeriphClockCmd"
+    ], 
+    "bytes": 50, 
+    "name": "status_gpio_init"
+  }, 
+  {
+    "decompiled": true, 
+    "address": "08000534", 
+    "calls": [], 
+    "bytes": 4, 
+    "name": "BusFault_Handler"
+  }, 
+  {
+    "decompiled": true, 
+    "address": "08000538", 
+    "calls": [], 
+    "bytes": 24, 
+    "name": "FUN_08000538"
+  }, 
+  {
+    "decompiled": true, 
+    "address": "08000550", 
+    "calls": [], 
+    "bytes": 324, 
+    "name": "FUN_08000550"
+  }, 
+  {
+    "decompiled": true, 
+    "address": "0800069c", 
+    "calls": [], 
+    "bytes": 60, 
+    "name": "FUN_0800069c"
+  }, 
+  {
+    "decompiled": true, 
+    "address": "080006d8", 
+    "calls": [], 
+    "bytes": 2, 
+    "name": "DebugMon_Handler"
+  }, 
+  {
+    "decompiled": true, 
+    "address": "080006dc", 
+    "calls": [], 
+    "bytes": 22, 
+    "name": "FUN_080006dc"
+  }, 
+  {
+    "decompiled": true, 
+    "address": "080006f8", 
+    "calls": [], 
+    "bytes": 18, 
+    "name": "FUN_080006f8"
+  }, 
+  {
+    "decompiled": true, 
+    "address": "08000710", 
+    "calls": [], 
+    "bytes": 278, 
+    "name": "GPIO_Init"
+  }, 
+  {
+    "decompiled": true, 
+    "address": "08000826", 
+    "calls": [], 
+    "bytes": 4, 
+    "name": "GPIO_SetBits"
+  }, 
+  {
+    "decompiled": true, 
+    "address": "0800082c", 
+    "calls": [], 
+    "bytes": 58, 
+    "name": "micros"
+  }, 
+  {
+    "decompiled": true, 
+    "address": "08000870", 
+    "calls": [], 
+    "bytes": 4, 
+    "name": "HardFault_Handler"
+  }, 
+  {
+    "decompiled": true, 
+    "address": "08000874", 
+    "calls": [], 
+    "bytes": 198, 
+    "name": "soft_i2c_ack"
+  }, 
+  {
+    "decompiled": true, 
+    "address": "08000940", 
+    "calls": [], 
+    "bytes": 200, 
+    "name": "soft_i2c_nack"
+  }, 
+  {
+    "decompiled": true, 
+    "address": "08000a0c", 
+    "calls": [], 
+    "bytes": 188, 
+    "name": "soft_i2c_read_byte"
+  }, 
+  {
+    "decompiled": true, 
+    "address": "08000acc", 
+    "calls": [], 
+    "bytes": 186, 
+    "name": "soft_i2c_write_byte"
+  }, 
+  {
+    "decompiled": true, 
+    "address": "08000b8c", 
+    "calls": [], 
+    "bytes": 144, 
+    "name": "soft_i2c_start"
+  }, 
+  {
+    "decompiled": true, 
+    "address": "08000c20", 
+    "calls": [], 
+    "bytes": 152, 
+    "name": "soft_i2c_stop"
+  }, 
+  {
+    "decompiled": true, 
+    "address": "08000cbc", 
+    "calls": [], 
+    "bytes": 176, 
+    "name": "soft_i2c_wait_ack"
+  }, 
+  {
+    "decompiled": true, 
+    "address": "08000d70", 
+    "calls": [
+      "08000710 GPIO_Init"
+    ], 
+    "bytes": 56, 
+    "name": "soft_i2c_gpio_init"
+  }, 
+  {
+    "decompiled": true, 
+    "address": "08000dac", 
+    "calls": [
+      "08000940 soft_i2c_nack", 
+      "08000a0c soft_i2c_read_byte", 
+      "08000acc soft_i2c_write_byte", 
+      "08000b8c soft_i2c_start", 
+      "08000c20 soft_i2c_stop", 
+      "08000cbc soft_i2c_wait_ack"
+    ], 
+    "bytes": 100, 
+    "name": "i2c_read_register"
+  }, 
+  {
+    "decompiled": true, 
+    "address": "08000e10", 
+    "calls": [
+      "08000acc soft_i2c_write_byte", 
+      "08000b8c soft_i2c_start", 
+      "08000c20 soft_i2c_stop", 
+      "08000cbc soft_i2c_wait_ack"
+    ], 
+    "bytes": 96, 
+    "name": "i2c_write_buffer"
+  }, 
+  {
+    "decompiled": true, 
+    "address": "08000e70", 
+    "calls": [
+      "08000acc soft_i2c_write_byte", 
+      "08000b8c soft_i2c_start", 
+      "08000c20 soft_i2c_stop", 
+      "08000cbc soft_i2c_wait_ack"
+    ], 
+    "bytes": 68, 
+    "name": "i2c_write_register"
+  }, 
+  {
+    "decompiled": true, 
+    "address": "08000eb4", 
+    "calls": [
+      "08000874 soft_i2c_ack", 
+      "08000940 soft_i2c_nack", 
+      "08000a0c soft_i2c_read_byte", 
+      "08000acc soft_i2c_write_byte", 
+      "08000b8c soft_i2c_start", 
+      "08000c20 soft_i2c_stop", 
+      "08000cbc soft_i2c_wait_ack"
+    ], 
+    "bytes": 128, 
+    "name": "i2c_read_buffer"
+  }, 
+  {
+    "decompiled": true, 
+    "address": "08000f34", 
+    "calls": [], 
+    "bytes": 4, 
+    "name": "MemManage_Handler"
+  }, 
+  {
+    "decompiled": true, 
+    "address": "08000f38", 
+    "calls": [], 
+    "bytes": 2, 
+    "name": "NMI_Handler"
+  }, 
+  {
+    "decompiled": true, 
+    "address": "08000f3c", 
+    "calls": [
+      "08001028 nrf_read_buffer", 
+      "080010fc nrf_write_buffer"
+    ], 
+    "bytes": 68, 
+    "name": "nrf_check"
+  }, 
+  {
+    "decompiled": true, 
+    "address": "08000f88", 
+    "calls": [
+      "08000710 GPIO_Init", 
+      "08000826 GPIO_SetBits", 
+      "08001324 RCC_APB2PeriphClockCmd", 
+      "080017f8 soft_spi_gpio_init"
+    ], 
+    "bytes": 152, 
+    "name": "nrf_gpio_init"
+  }, 
+  {
+    "decompiled": true, 
+    "address": "08001028", 
+    "calls": [
+      "08001864 soft_spi_transfer"
+    ], 
+    "bytes": 62, 
+    "name": "nrf_read_buffer"
+  }, 
+  {
+    "decompiled": true, 
+    "address": "0800106c", 
+    "calls": [
+      "08001864 soft_spi_transfer"
+    ], 
+    "bytes": 40, 
+    "name": "nrf_read_register"
+  }, 
+  {
+    "decompiled": true, 
+    "address": "08001098", 
+    "calls": [
+      "0800106c nrf_read_register", 
+      "080010fc nrf_write_buffer", 
+      "08001140 nrf_write_register"
+    ], 
+    "bytes": 96, 
+    "name": "nrf_transmit_32"
+  }, 
+  {
+    "decompiled": true, 
+    "address": "080010fc", 
+    "calls": [
+      "08001864 soft_spi_transfer"
+    ], 
+    "bytes": 62, 
+    "name": "nrf_write_buffer"
+  }, 
+  {
+    "decompiled": true, 
+    "address": "08001140", 
+    "calls": [
+      "08001864 soft_spi_transfer"
+    ], 
+    "bytes": 42, 
+    "name": "nrf_write_register"
+  }, 
+  {
+    "decompiled": true, 
+    "address": "08001170", 
+    "calls": [
+      "08000f3c nrf_check", 
+      "08000f88 nrf_gpio_init", 
+      "08001910 nrf_tx_mode"
+    ], 
+    "bytes": 22, 
+    "name": "nrf_init"
+  }, 
+  {
+    "decompiled": true, 
+    "address": "08001188", 
+    "calls": [
+      "08001098 nrf_transmit_32"
+    ], 
+    "bytes": 106, 
+    "name": "build_and_send_packet"
+  }, 
+  {
+    "decompiled": true, 
+    "address": "080011fc", 
+    "calls": [
+      "08001244 NVIC_Init", 
+      "080012b4 NVIC_PriorityGroupConfig"
+    ], 
+    "bytes": 70, 
+    "name": "interrupts_init"
+  }, 
+  {
+    "decompiled": true, 
+    "address": "08001244", 
+    "calls": [], 
+    "bytes": 100, 
+    "name": "NVIC_Init"
+  }, 
+  {
+    "decompiled": true, 
+    "address": "080012b4", 
+    "calls": [], 
+    "bytes": 10, 
+    "name": "NVIC_PriorityGroupConfig"
+  }, 
+  {
+    "decompiled": true, 
+    "address": "080012c8", 
+    "calls": [], 
+    "bytes": 2, 
+    "name": "PendSV_Handler"
+  }, 
+  {
+    "decompiled": true, 
+    "address": "080012cc", 
+    "calls": [], 
+    "bytes": 18, 
+    "name": "RCC_ADCCLKConfig"
+  }, 
+  {
+    "decompiled": true, 
+    "address": "080012e4", 
+    "calls": [], 
+    "bytes": 26, 
+    "name": "RCC_AHBPeriphClockCmd"
+  }, 
+  {
+    "decompiled": true, 
+    "address": "08001304", 
+    "calls": [], 
+    "bytes": 26, 
+    "name": "RCC_APB1PeriphClockCmd"
+  }, 
+  {
+    "decompiled": true, 
+    "address": "08001324", 
+    "calls": [], 
+    "bytes": 26, 
+    "name": "RCC_APB2PeriphClockCmd"
+  }, 
+  {
+    "decompiled": true, 
+    "address": "08001344", 
+    "calls": [
+      "080006dc FUN_080006dc", 
+      "080006f8 FUN_080006f8", 
+      "08001304 RCC_APB1PeriphClockCmd", 
+      "08001324 RCC_APB2PeriphClockCmd", 
+      "080013c0 RCC_DeInit", 
+      "080014e0 FUN_080014e0", 
+      "0800151c FUN_0800151c", 
+      "0800152c FUN_0800152c", 
+      "08001544 FUN_08001544", 
+      "08001550 FUN_08001550", 
+      "08001568 FUN_08001568", 
+      "08001580 FUN_08001580", 
+      "0800158c FUN_0800158c", 
+      "080015a8 FUN_080015a8"
+    ], 
+    "bytes": 120, 
+    "name": "clock_init"
+  }, 
+  {
+    "decompiled": true, 
+    "address": "080013c0", 
+    "calls": [], 
+    "bytes": 64, 
+    "name": "RCC_DeInit"
+  }, 
+  {
+    "decompiled": true, 
+    "address": "0800140c", 
+    "calls": [], 
+    "bytes": 192, 
+    "name": "RCC_GetClocksFreq"
+  }, 
+  {
+    "decompiled": true, 
+    "address": "080014e0", 
+    "calls": [], 
+    "bytes": 56, 
+    "name": "FUN_080014e0"
+  }, 
+  {
+    "decompiled": true, 
+    "address": "0800151c", 
+    "calls": [], 
+    "bytes": 10, 
+    "name": "FUN_0800151c"
+  }, 
+  {
+    "decompiled": true, 
+    "address": "0800152c", 
+    "calls": [], 
+    "bytes": 18, 
+    "name": "FUN_0800152c"
+  }, 
+  {
+    "decompiled": true, 
+    "address": "08001544", 
+    "calls": [], 
+    "bytes": 6, 
+    "name": "FUN_08001544"
+  }, 
+  {
+    "decompiled": true, 
+    "address": "08001550", 
+    "calls": [], 
+    "bytes": 18, 
+    "name": "FUN_08001550"
+  }, 
+  {
+    "decompiled": true, 
+    "address": "08001568", 
+    "calls": [], 
+    "bytes": 20, 
+    "name": "FUN_08001568"
+  }, 
+  {
+    "decompiled": true, 
+    "address": "08001580", 
+    "calls": [], 
+    "bytes": 6, 
+    "name": "FUN_08001580"
+  }, 
+  {
+    "decompiled": true, 
+    "address": "0800158c", 
+    "calls": [], 
+    "bytes": 24, 
+    "name": "FUN_0800158c"
+  }, 
+  {
+    "decompiled": true, 
+    "address": "080015a8", 
+    "calls": [], 
+    "bytes": 18, 
+    "name": "FUN_080015a8"
+  }, 
+  {
+    "decompiled": true, 
+    "address": "080015c0", 
+    "calls": [
+      "08001188 build_and_send_packet", 
+      "080019f8 scan_keys", 
+      "08001d20 soft_float_add", 
+      "08001de4 soft_float_to_uint", 
+      "08001e24 soft_uint_to_float", 
+      "08001e4c soft_float_multiply"
+    ], 
+    "bytes": 504, 
+    "name": "update_controls"
+  }, 
+  {
+    "decompiled": true, 
+    "address": "080017d4", 
+    "calls": [
+      "08001be0 keys_gpio_init", 
+      "08001cc4 eeprom_read_u16"
+    ], 
+    "bytes": 32, 
+    "name": "load_trim_and_init_keys"
+  }, 
+  {
+    "decompiled": true, 
+    "address": "080017f8", 
+    "calls": [
+      "08000710 GPIO_Init", 
+      "08000826 GPIO_SetBits", 
+      "08001324 RCC_APB2PeriphClockCmd"
+    ], 
+    "bytes": 104, 
+    "name": "soft_spi_gpio_init"
+  }, 
+  {
+    "decompiled": true, 
+    "address": "08001864", 
+    "calls": [], 
+    "bytes": 94, 
+    "name": "soft_spi_transfer"
+  }, 
+  {
+    "decompiled": true, 
+    "address": "080018c8", 
+    "calls": [], 
+    "bytes": 2, 
+    "name": "SVC_Handler"
+  }, 
+  {
+    "decompiled": true, 
+    "address": "080018cc", 
+    "calls": [
+      "080015c0 update_controls"
+    ], 
+    "bytes": 40, 
+    "name": "SysTick_Handler"
+  }, 
+  {
+    "decompiled": true, 
+    "address": "080018fc", 
+    "calls": [], 
+    "bytes": 14, 
+    "name": "SystemInit"
+  }, 
+  {
+    "decompiled": true, 
+    "address": "08001910", 
+    "calls": [
+      "080010fc nrf_write_buffer", 
+      "08001140 nrf_write_register"
+    ], 
+    "bytes": 90, 
+    "name": "nrf_tx_mode"
+  }, 
+  {
+    "decompiled": true, 
+    "address": "08001978", 
+    "calls": [], 
+    "bytes": 10, 
+    "name": "USART1_IRQHandler"
+  }, 
+  {
+    "decompiled": true, 
+    "address": "08001988", 
+    "calls": [], 
+    "bytes": 4, 
+    "name": "UsageFault_Handler"
+  }, 
+  {
+    "decompiled": true, 
+    "address": "0800198c", 
+    "calls": [
+      "0800023c adc_gpio_init", 
+      "0800026c adc_dma_init", 
+      "08000d70 soft_i2c_gpio_init", 
+      "08001170 nrf_init", 
+      "080017d4 load_trim_and_init_keys", 
+      "08001cda eeprom_check"
+    ], 
+    "bytes": 34, 
+    "name": "board_init"
+  }, 
+  {
+    "decompiled": true, 
+    "address": "080019b0", 
+    "calls": [
+      "0800140c RCC_GetClocksFreq"
+    ], 
+    "bytes": 26, 
+    "name": "timebase_init"
+  }, 
+  {
+    "decompiled": true, 
+    "address": "080019d4", 
+    "calls": [
+      "0800082c micros"
+    ], 
+    "bytes": 34, 
+    "name": "delay_ms"
+  }, 
+  {
+    "decompiled": true, 
+    "address": "080019f8", 
+    "calls": [
+      "08001d06 eeprom_write_u16"
+    ], 
+    "bytes": 454, 
+    "name": "scan_keys"
+  }, 
+  {
+    "decompiled": true, 
+    "address": "08001be0", 
+    "calls": [
+      "08000710 GPIO_Init", 
+      "08001324 RCC_APB2PeriphClockCmd"
+    ], 
+    "bytes": 80, 
+    "name": "keys_gpio_init"
+  }, 
+  {
+    "decompiled": true, 
+    "address": "08001c40", 
+    "calls": [
+      "080004fc status_gpio_init", 
+      "080011fc interrupts_init", 
+      "08001344 clock_init", 
+      "0800198c board_init", 
+      "080019b0 timebase_init"
+    ], 
+    "bytes": 116, 
+    "name": "main"
+  }, 
+  {
+    "decompiled": true, 
+    "address": "08001cc4", 
+    "calls": [
+      "08000eb4 i2c_read_buffer"
+    ], 
+    "bytes": 22, 
+    "name": "eeprom_read_u16"
+  }, 
+  {
+    "decompiled": true, 
+    "address": "08001cda", 
+    "calls": [
+      "08000dac i2c_read_register", 
+      "08000e70 i2c_write_register", 
+      "080019d4 delay_ms"
+    ], 
+    "bytes": 44, 
+    "name": "eeprom_check"
+  }, 
+  {
+    "decompiled": true, 
+    "address": "08001d06", 
+    "calls": [
+      "08000e10 i2c_write_buffer", 
+      "080019d4 delay_ms"
+    ], 
+    "bytes": 24, 
+    "name": "eeprom_write_u16"
+  }, 
+  {
+    "decompiled": true, 
+    "address": "08001d20", 
+    "calls": [
+      "08001f4e FUN_08001f4e"
+    ], 
+    "bytes": 412, 
+    "name": "soft_float_add"
+  }, 
+  {
+    "decompiled": true, 
+    "address": "08001de4", 
+    "calls": [
+      "08001f4e FUN_08001f4e"
+    ], 
+    "bytes": 56, 
+    "name": "soft_float_to_uint"
+  }, 
+  {
+    "decompiled": true, 
+    "address": "08001e24", 
+    "calls": [], 
+    "bytes": 38, 
+    "name": "soft_uint_to_float"
+  }, 
+  {
+    "decompiled": true, 
+    "address": "08001e4c", 
+    "calls": [
+      "08001f4e FUN_08001f4e"
+    ], 
+    "bytes": 234, 
+    "name": "soft_float_multiply"
+  }, 
+  {
+    "decompiled": true, 
+    "address": "08001f4e", 
+    "calls": [], 
+    "bytes": 136, 
+    "name": "FUN_08001f4e"
+  }
+]

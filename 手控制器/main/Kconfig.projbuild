@@ -1,0 +1,27 @@
+menu "Camera telemetry uplink"
+config HAND_CAMERA_SSID
+    string "Camera hotspot SSID"
+    default "Camera-D6A4"
+config HAND_CAMERA_PASSWORD
+    string "Camera hotspot password (empty for current open hotspot)"
+    default ""
+config HAND_CAMERA_HOST
+    string "Camera IPv4 address"
+    default "192.168.4.1"
+config HAND_VOLTAGE_REFERENCE_MV
+    int "Voltage calibration reference (mV)"
+    range 1 6000
+    default 1000
+    help
+        Known voltage for a one-point proportional calibration. The reported
+        voltage is the divider reading times REFERENCE_MV / READING_MV.
+        Equal values disable this additional gain correction.
+config HAND_VOLTAGE_READING_MV
+    int "Uncorrected divider reading at the reference voltage (mV)"
+    range 1 10000
+    default 1000
+    help
+        Use the reading before this gain correction, in the same supply
+        condition as the reference. A single point does not verify other
+        voltages or compensate for a change in the sampled supply source.
+endmenu

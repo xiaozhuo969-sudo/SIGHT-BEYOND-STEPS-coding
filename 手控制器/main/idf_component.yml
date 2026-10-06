@@ -1,0 +1,5 @@
+dependencies:
+  espressif/cjson: "^1.7.19"
+  waveshare/qmi8658: "==2.0.1"
+  espressif/button: "==4.2.1"
+  espressif/esp_health: "==0.1.0"
