@@ -193,6 +193,19 @@ static void test_haptics(void)
     assert(haptic_update(&h,11001,true,true)==2&&h.remaining[0]==2000);
     assert(haptic_update(&h,14001,true,true)==1);
     assert(haptic_update(&h,16001,true,true)==0);
+    /* Reproduce range jumping far for 500ms then near within an active pulse. */
+    h=(haptic_policy_t){0};assert(haptic_update(&h,100,true,false)==1);
+    assert(haptic_update(&h,1000,false,false)==1);
+    assert(haptic_update(&h,2800,true,false)==1&&h.remaining[0]==300);
+    assert(haptic_update(&h,3100,true,false)==0);
+    assert(haptic_update(&h,6000,true,false)==0);
+    haptic_update(&h,6100,false,false);assert(haptic_update(&h,6200,true,false)==1);
+    /* A paused obstacle pulse also cannot be refilled by a noisy range edge. */
+    assert(haptic_update(&h,7200,true,true)==2&&h.remaining[0]==2000);
+    assert(haptic_update(&h,7500,false,true)==2);
+    assert(haptic_update(&h,7800,true,true)==2&&h.remaining[0]==2000);
+    assert(haptic_update(&h,10200,true,true)==1);
+    assert(haptic_update(&h,12200,true,true)==0);
 }
 static void test_ground_obstacle(void)
 {
