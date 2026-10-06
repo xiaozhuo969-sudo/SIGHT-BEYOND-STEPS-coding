@@ -13,7 +13,7 @@
   "baseline_hand_build": "PASS",
   "modified_hand_build": "PASS",
   "hand_app_partition_bytes": 1048576,
-  "hand_app_free_bytes": 912,
+  "hand_app_free_bytes": 944,
   "desktop_gui_baseline_failures": [
     "test_device_calibration_and_layout",
     "test_estop_visible_every_page_and_shortcut"
@@ -25,8 +25,8 @@
   "artifacts": {
     "hand_app": {
       "path": "D:/Espressif/builds/hand-release/hand_controller_imu.bin",
-      "bytes": 1047664,
-      "sha256": "8a0657f5447c7c2b05e8832e603b97f795be49123d8788be83fc9b435f0e213e"
+      "bytes": 1047632,
+      "sha256": "d5fdb3ebcde350dbd7fd786aac87c17a4b07b519bab46fdf38d0ad5abe49ade3"
     },
     "hand_bootloader": {
       "path": "D:/Espressif/builds/hand-release/bootloader/bootloader.bin",
@@ -53,5 +53,17 @@
       "bytes": 131072,
       "sha256": "e14dc240ae4a5233c12297812f2d24829d1f4c0ce8819f8b455448db97ee963b"
     }
-  }
+  },
+  "release": "feedback-leds-2026-10-06",
+  "led_role_assignment_authorization": "User delegated software IO role design on 2026-10-06",
+  "led_role_gpio": {
+    "aircraft_link": 12,
+    "camera_upload_ack": 13,
+    "gesture_left": 14,
+    "gesture_right": 21,
+    "gesture_down": 47
+  },
+  "led_active_level": 0,
+  "led_release_hand_build_log": "D:/Espressif/logs/hand-leds-build.log",
+  "flight_validation_note": "Unchanged from ad391ca; prior 245 compiled-ELF checks retained, no repeat required for hand LED mapping."
 }

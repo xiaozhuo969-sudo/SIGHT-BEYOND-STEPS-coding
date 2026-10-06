@@ -22,8 +22,8 @@
 #define ALARM_LED_GPIO GPIO_NUM_5
 #define LED_COUNT 5
 // Role order: aircraft link, camera link, left, right, down.
-// Physical lamp assignment is awaiting the user's one-at-a-time identification.
-static const int s_role_pins[LED_COUNT]={-1,-1,-1,-1,-1};
+// User-delegated assignment: LED3, LED4, LED5, LED6, SW1 (active low).
+static const int s_role_pins[LED_COUNT]={GPIO_NUM_12,GPIO_NUM_13,GPIO_NUM_14,GPIO_NUM_21,GPIO_NUM_47};
 
 static const gpio_num_t s_led_pins[LED_COUNT] = {
     GPIO_NUM_12, GPIO_NUM_13,
@@ -80,7 +80,7 @@ static void button_up_cb(void *button, void *user_data)
 static void led_task(void *arg)
 {
     (void)arg;
-    ESP_LOGI(TAG,"LED roles unassigned; identify with @L,TEST,12/13/14/21/47 (-1=off)");
+    ESP_LOGI(TAG,"LED GPIO air=12 camera=13 left=14 right=21 down=47");
     for(;;) {
         bool air,obstacle; unsigned gesture; int test_pin;
         telemetry_indicator_snapshot(&air,&obstacle,&gesture,&test_pin);
