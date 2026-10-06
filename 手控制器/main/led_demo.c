@@ -18,16 +18,17 @@
 #define PALM_BUTTON_GPIO GPIO_NUM_9
 #define START_BUTTON_GPIO GPIO_NUM_10
 #define STOP_BUTTON_GPIO GPIO_NUM_11
+#define HOLD_BUTTON_GPIO GPIO_NUM_47
 #define FLIGHT_BUTTON_ACTIVE_LEVEL 0
 #define ALARM_LED_GPIO GPIO_NUM_5
-#define LED_COUNT 5
-// Role order: aircraft link, camera link, left, right, down.
-// User-delegated assignment: LED3, LED4, LED5, LED6, SW1 (active low).
-static const int s_role_pins[LED_COUNT]={GPIO_NUM_12,GPIO_NUM_13,GPIO_NUM_14,GPIO_NUM_21,GPIO_NUM_47};
+#define LED_COUNT 4
+// GPIO47/SW1 is a height-hold input, never a lamp output.
+// Role order: aircraft link, camera link, left, right.
+static const int s_role_pins[LED_COUNT]={GPIO_NUM_12,GPIO_NUM_13,GPIO_NUM_14,GPIO_NUM_21};
 
 static const gpio_num_t s_led_pins[LED_COUNT] = {
     GPIO_NUM_12, GPIO_NUM_13,
-    GPIO_NUM_14, GPIO_NUM_21, GPIO_NUM_47,
+    GPIO_NUM_14, GPIO_NUM_21,
 };
 static const char *TAG = "led_demo";
 
@@ -63,6 +64,15 @@ static void show_leds(uint8_t mask)
     }
 }
 
+static void hold_key_down(void *button, void *user_data)
+{
+    (void)button; (void)user_data; telemetry_hold_key(true);
+}
+static void hold_key_up(void *button, void *user_data)
+{
+    (void)button; (void)user_data; telemetry_hold_key(false);
+}
+
 static void button_down_cb(void *button, void *user_data)
 {
     (void)button;
@@ -80,12 +90,12 @@ static void button_up_cb(void *button, void *user_data)
 static void led_task(void *arg)
 {
     (void)arg;
-    ESP_LOGI(TAG,"LED GPIO air=12 camera=13 left=14 right=21 down=47");
+    ESP_LOGI(TAG,"LED GPIO air=12 camera=13 left=14 right=21; GPIO47=height hold input");
     for(;;) {
         bool air,obstacle; unsigned gesture; int test_pin;
         telemetry_indicator_snapshot(&air,&obstacle,&gesture,&test_pin);
         bool roles[LED_COUNT]={air,camera_uplink_healthy(),gesture==GESTURE_LEFT,
-                              gesture==GESTURE_RIGHT,gesture==GESTURE_DOWN};
+                              gesture==GESTURE_RIGHT};
         uint8_t mask=0;
         for(unsigned i=0;i<LED_COUNT;++i) {
             if(test_pin>=0) { if((int)s_led_pins[i]==test_pin) mask|=1U<<i; }
@@ -135,6 +145,16 @@ void led_demo_start(void)
         ESP_ERROR_CHECK(iot_button_register_cb(flight_buttons[i],BUTTON_PRESS_UP,NULL,flight_key_up,(void *)(uintptr_t)i));
     }
     ESP_LOGI(TAG,"LED1/GPIO10: connect+takeoff on release; LED2/GPIO11: immediate stop (active low)");
+
+    // Same assembled wiring as GPIO10/11: released high, pressed low.
+    button_handle_t hold_button=NULL;
+    const button_gpio_config_t hold_gpio={.gpio_num=HOLD_BUTTON_GPIO,.active_level=0,.disable_pull=true};
+    ESP_ERROR_CHECK(iot_button_new_gpio_device(&key_config,&hold_gpio,&hold_button));
+    ESP_ERROR_CHECK(gpio_set_pull_mode(HOLD_BUTTON_GPIO,GPIO_PULLDOWN_ONLY));
+    // A held key at boot establishes state only; release then press is required.
+    telemetry_hold_key_init(gpio_get_level(HOLD_BUTTON_GPIO)==0);
+    ESP_ERROR_CHECK(iot_button_register_cb(hold_button,BUTTON_PRESS_DOWN,NULL,hold_key_down,NULL));
+    ESP_ERROR_CHECK(iot_button_register_cb(hold_button,BUTTON_PRESS_UP,NULL,hold_key_up,NULL));
 
     // The assembled palm button measured high at rest and low when pressed.
     // A pull-down keeps GPIO9 low when the switch opens.

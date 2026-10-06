@@ -8,6 +8,10 @@ static bool airborne(const tx_control_t *s)
 }
 void tx_guard_refresh(tx_control_t *s, uint32_t now)
 {
+    if(s->phase!=TX_ALT_LIVE || !s->air_height_valid || !(s->air_flags&2)) {
+        if(s->height_hold) s->hold_reason=(s->phase==TX_ALT_MANUAL || s->phase==TX_ALT_LIVE)?HOLD_NO_HEIGHT:HOLD_NOT_FLYING;
+        s->height_hold=false;
+    }
     if (!airborne(s)) s->guard=(hand_feedback_t){0};
     else {
         hand_feedback_expire(&s->guard,now);
@@ -42,6 +46,7 @@ void tx_stop(tx_control_t *s, uint32_t now, unsigned reason)
 }
 void tx_fault(tx_control_t *s)
 {
+    s->height_hold=false;
     s->phase = TX_FAULT; s->reason = TX_REASON_RADIO; s->guard=(hand_feedback_t){0};
 }
 void tx_sent(tx_control_t *s) { if (s->sent < 10000) ++s->sent; }
@@ -84,7 +89,7 @@ bool tx_step(tx_control_t *s, uint32_t now, bool pose_valid, bool flat,
         channels[2]=1500;channels[4]=2000;
         if(s->phase==TX_ALT_LIVE||s->phase==TX_ALT_MANUAL) memcpy(channels,preview,8*sizeof(*channels));
         if(s->phase==TX_ALT_LIVE||s->phase==TX_ALT_MANUAL) {
-            if(s->guard.hold) {
+            if(s->guard.hold || s->height_hold) {
                 channels[0]=channels[1]=channels[3]=1500;
                 /* In manual height-loss recovery, retain pilot vertical control. */
                 if(s->phase==TX_ALT_LIVE) channels[2]=1500;
@@ -94,6 +99,22 @@ bool tx_step(tx_control_t *s, uint32_t now, bool pose_valid, bool flat,
         }
     }
     return true;
+}
+
+bool tx_toggle_height_hold(tx_control_t *s, uint32_t now)
+{
+    tx_guard_refresh(s,now);
+    if(s->height_hold) { s->height_hold=false;s->hold_reason=HOLD_OK;return true; }
+    if(!s->v3 || s->phase!=TX_ALT_LIVE || !(s->air_flags&1)) {
+        s->hold_reason=s->phase==TX_ALT_MANUAL?HOLD_NO_HEIGHT:HOLD_NOT_FLYING;return false;
+    }
+    if(!s->feedback || (uint32_t)(now-s->feedback_ms)>=300 || s->link_warning) {
+        s->hold_reason=HOLD_NO_LINK;return false;
+    }
+    if(!s->air_height_valid || !(s->air_flags&2) || s->air_stage!=HC_STAGE_HOLD) {
+        s->hold_reason=HOLD_NO_HEIGHT;return false;
+    }
+    s->height_hold=true;s->hold_reason=HOLD_OK;return true;
 }
 
 bool tx_clear_obstacle(tx_control_t *s, uint32_t now)
