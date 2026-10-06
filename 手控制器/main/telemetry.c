@@ -46,6 +46,7 @@ typedef struct {
     bool finger;
     bool button;
     bool leds;
+    bool obstacle_led;
     int64_t attitude_us;
     int64_t ppg_us;
     bool rc_ready;
@@ -230,14 +231,14 @@ void telemetry_set_button(bool pressed)
     portEXIT_CRITICAL(&s_mux);
 }
 
-void telemetry_indicator_snapshot(bool *air, bool *obstacle, unsigned *gesture, int *test_pin, int *air_roll)
+void telemetry_indicator_snapshot(bool *air, unsigned *obstacle, unsigned *gesture, int *test_pin, int *air_roll)
 {
     uint32_t now=(uint32_t)(esp_timer_get_time()/1000);
     portENTER_CRITICAL(&s_mux);
     bool fresh=s_tx.feedback && s_tx.phase!=TX_OFF && s_tx.phase!=TX_FAULT &&
                s_tx.phase!=TX_STOPPING && (uint32_t)(now-s_tx.feedback_ms)<300;
     *air=fresh && !s_tx.link_warning;
-    *obstacle=s_tx.guard.hold;
+    *obstacle=tx_obstacle_indicator(&s_tx,now);
     *gesture=s_control_gesture.valid && s_state.imu &&
         esp_timer_get_time()-s_state.attitude_us<500000 ? s_signal : GESTURE_UNKNOWN;
     if(s_tx.guard.hold && !(s_tx.phase==TX_ALT_MANUAL && *gesture==GESTURE_DOWN))
@@ -251,6 +252,12 @@ void telemetry_set_led(bool enabled, unsigned pattern)
     portENTER_CRITICAL(&s_mux);
     s_state.leds = enabled;
     s_state.pattern = pattern;
+    portEXIT_CRITICAL(&s_mux);
+}
+void telemetry_set_obstacle_led(bool on)
+{
+    portENTER_CRITICAL(&s_mux);
+    s_state.obstacle_led=on;
     portEXIT_CRITICAL(&s_mux);
 }
 
@@ -316,7 +323,7 @@ static void control_task(void *arg)
             s_gesture.calibrated && s_signal==GESTURE_FLAT,
             s_gesture.calibrated && s_gesture.phase==1,s_state.button);
         tx_guard_refresh(&s_tx,now_ms);
-        bool obstacle_alarm=s_tx.guard.hold;
+        bool obstacle_alarm=tx_obstacle_alarm(&s_tx);
         bool tilt_alarm=s_tx.guard.tilt;
         portEXIT_CRITICAL(&s_mux);
         // Outside telemetry's lock: motor publication takes this same lock.
@@ -428,6 +435,7 @@ static void telemetry_task(void *arg)
                "\"air_height_mm\":%u,\"air_relative_mm\":%d,\"air_collective\":%u,\"air_radio_faults\":%u,\"air_detail_age_ms\":%ld,"
                "\"link_warning\":%u,\"tx_can_resume\":%u,\"air_resume_ready\":%u,"
                "\"guard_hold\":%u,\"guard_ready\":%u,\"tilt_alarm\":%u,"
+               "\"obstacle_alarm\":%u,\"obstacle_mode\":%u,\"obstacle_led\":%u,"
                "\"tx_rx_us\":%lu,\"tx_rx_max_us\":%lu,\"tx_rx_late\":%lu,"
                "\"reject_schema\":%lu,\"reject_session\":%lu,\"reject_sequence\":%lu,"
                "\"air_rx_gap_ms\":%u,\"air_rx_max_gap_ms\":%u,\"air_first_event\":%u,\"air_diag_age_ms\":%ld,"
@@ -469,6 +477,7 @@ static void telemetry_task(void *arg)
                tx.air_collective,tx.air_radio_faults,tx.detail?(long)(uint32_t)((uint32_t)(now/1000)-tx.detail_ms):-1L,
                tx.link_warning,tx_can_resume(&tx,(uint32_t)(now/1000),gesture.valid&&settings.calibrated&&gesture.signal==GESTURE_FLAT),tx.resume_ready,
                tx.guard.hold,tx.guard.ready,tx.guard.tilt,
+               tx_obstacle_alarm(&tx),tx_obstacle_indicator(&tx,(uint32_t)(now/1000)),state.obstacle_led,
                (unsigned long)tx_rx_us,(unsigned long)tx_rx_max_us,(unsigned long)tx_rx_late,
                (unsigned long)tx.rejected_schema,(unsigned long)tx.rejected_session,(unsigned long)tx.rejected_sequence,
                tx.air_rx_gap_ms,tx.air_rx_max_gap_ms,tx.air_first_event,

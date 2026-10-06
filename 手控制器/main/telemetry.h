@@ -3,7 +3,7 @@
 #include <stdint.h>
 #include "../../shared/hud_protocol.h"
 
-void telemetry_indicator_snapshot(bool *air, bool *obstacle, unsigned *gesture, int *test_pin, int *air_roll);
+void telemetry_indicator_snapshot(bool *air, unsigned *obstacle, unsigned *gesture, int *test_pin, int *air_roll);
 void telemetry_start(void);
 void telemetry_set_attitude(float pitch, float roll);
 void telemetry_set_imu_calibration(unsigned status, unsigned progress, const float bias[3]);
@@ -15,6 +15,7 @@ void telemetry_set_button(bool pressed);
 void telemetry_flight_keys_init(bool start_down, bool stop_down);
 void telemetry_flight_key(unsigned key, bool pressed);
 void telemetry_set_led(bool enabled, unsigned pattern);
+void telemetry_set_obstacle_led(bool on);
 void telemetry_set_motor(unsigned channel, unsigned strength);
 
 void telemetry_set_radio_ready(bool ready);

@@ -6,6 +6,20 @@ static bool airborne(const tx_control_t *s)
 {
     return s->v3 && s->phase>=TX_ALT_TAKEOFF && s->phase<=TX_ALT_RESUME;
 }
+static bool ground_feedback(const tx_control_t *s)
+{
+    return s->v3 && (s->phase==TX_READY || s->phase==TX_ARM_REQUEST || s->phase==TX_ALT_IDLE);
+}
+bool tx_obstacle_alarm(const tx_control_t *s)
+{
+    /* Ground proximity is an indication only; never sets the flight hold latch. */
+    return s->guard.hold || (ground_feedback(s) && s->guard.near_latched);
+}
+unsigned tx_obstacle_indicator(const tx_control_t *s, uint32_t now)
+{
+    if (s->guard.hold) return 2; /* flying: flashing, acknowledgement required */
+    return ground_feedback(s) && hand_feedback_near_indicator(&s->guard,now) ? 1 : 0;
+}
 void tx_guard_refresh(tx_control_t *s, uint32_t now)
 {
     if (s->phase==TX_OFF || s->phase==TX_FAULT) s->guard=(hand_feedback_t){0};

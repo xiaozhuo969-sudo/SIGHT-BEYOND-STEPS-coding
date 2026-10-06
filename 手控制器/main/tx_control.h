@@ -39,6 +39,8 @@ typedef struct {
 } tx_control_t;
 bool tx_clear_obstacle(tx_control_t *s, uint32_t now);
 void tx_guard_refresh(tx_control_t *s, uint32_t now);
+bool tx_obstacle_alarm(const tx_control_t *s);
+unsigned tx_obstacle_indicator(const tx_control_t *s, uint32_t now);
 bool tx_arm(tx_control_t *s, uint32_t now, bool flat_calibrated);
 void tx_stop(tx_control_t *s, uint32_t now, unsigned reason);
 void tx_estop(tx_control_t *s, uint32_t now);

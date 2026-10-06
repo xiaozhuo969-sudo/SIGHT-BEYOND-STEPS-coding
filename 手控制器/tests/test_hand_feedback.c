@@ -194,10 +194,62 @@ static void test_haptics(void)
     assert(haptic_update(&h,14001,true,true)==1);
     assert(haptic_update(&h,16001,true,true)==0);
 }
+static void test_ground_obstacle(void)
+{
+    tx_control_t s={0};assert(tx_start_v3(&s,1000,42));
+    hc_packet_t p={.version=3,.command=HC_TELEMETRY,.session=42,.assist=3,
+        .channels={0,HC_OK,1000,HC_DISARM,0,0,0,101}};
+    uint8_t b[32];haptic_policy_t h={0};
+    p.sequence=++s.sequence;hc_encode(&p,b);tx_feedback(&s,b,1100);
+    assert(!tx_obstacle_alarm(&s)&&!tx_obstacle_indicator(&s,1100));
+    p.channels[7]=100;p.sequence=++s.sequence;hc_encode(&p,b);tx_feedback(&s,b,1400);
+    assert(tx_obstacle_alarm(&s)&&tx_obstacle_indicator(&s,1400)==1);
+    assert(!s.guard.hold&&!s.guard.ready&&s.phase==TX_READY);
+    assert(hand_indicator_obstacle(1,true)&&hand_indicator_obstacle(1,false));
+    assert(!hand_indicator_obstacle(0,true)&&!hand_indicator_obstacle(0,false));
+    assert(hand_indicator_obstacle(2,true)&&!hand_indicator_obstacle(2,false));
+    assert(haptic_update(&h,1400,tx_obstacle_alarm(&s),false)==1);
+    assert(haptic_update(&h,4399,tx_obstacle_alarm(&s),false)==1);
+    assert(haptic_update(&h,4400,tx_obstacle_alarm(&s),false)==0);
+    assert(haptic_update(&h,8000,tx_obstacle_alarm(&s),false)==0);
+    assert(!tx_obstacle_indicator(&s,2000)); /* stale data cannot light GPIO5 */
+    p.channels[7]=50;p.sequence=++s.sequence;hc_encode(&p,b);tx_feedback(&s,b,8100);
+    assert(tx_obstacle_indicator(&s,8100)==1);
+    assert(haptic_update(&h,8100,tx_obstacle_alarm(&s),false)==0); /* no repeated stale edge */
+    p.assist=1;p.channels[7]=HC_DISTANCE_UNKNOWN;p.sequence=++s.sequence;
+    hc_encode(&p,b);tx_feedback(&s,b,8400);
+    assert(!tx_obstacle_indicator(&s,8400)&&tx_obstacle_alarm(&s));
+    p.assist=3;p.channels[7]=101;
+    for(unsigned i=0;i<3;++i) {
+        p.sequence=++s.sequence;hc_encode(&p,b);tx_feedback(&s,b,8700+i*300);
+        assert(!tx_obstacle_indicator(&s,8700+i*300));
+    }
+    assert(!tx_obstacle_alarm(&s));haptic_update(&h,9300,false,false);
+    p.channels[7]=99;p.sequence=++s.sequence;hc_encode(&p,b);tx_feedback(&s,b,9600);
+    assert(haptic_update(&h,9600,tx_obstacle_alarm(&s),false)==1);
+    assert(!s.guard.hold&&!tx_clear_obstacle(&s,9600));
+    s.heartbeat=9600;assert(tx_step(&s,9600,true,true,moving,out));tx_encode(&s,out,b);
+    assert(hc_decode(b,&p)&&p.command==HC_DISARM&&p.channels[2]==1000);
+    s.phase=TX_ALT_IDLE;assert(tx_obstacle_alarm(&s));
+    s.phase=TX_ALT_LAND;tx_guard_refresh(&s,9601);
+    assert(!tx_obstacle_alarm(&s)&&!tx_obstacle_indicator(&s,9601));
+    s.phase=TX_OFF;tx_guard_refresh(&s,9602);assert(!s.guard.near_latched);
+    s=live();telem(&s,50,3,100,0,0);
+    assert(s.guard.hold&&tx_obstacle_indicator(&s,50)==2);
+    /* A short invalid interval cannot rearm the ground event. */
+    hand_feedback_t g={0};uint32_t t=UINT32_MAX-400;
+    hand_feedback_sample(&g,t,true,100,true,0,0,false);
+    hand_feedback_sample(&g,t+300,true,101,true,0,0,false);
+    hand_feedback_sample(&g,t+600,false,0,true,0,0,false);assert(g.near_latched);
+    hand_feedback_sample(&g,t+900,true,101,true,0,0,false);
+    hand_feedback_sample(&g,t+1200,true,101,true,0,0,false);assert(g.near_latched);
+    hand_feedback_sample(&g,t+1500,true,101,true,0,0,false);assert(!g.near_latched);
+}
 int main(void)
 {
     test_policy();test_wire_and_recovery();test_invalid_and_session();test_haptics();
     test_ground_tilt_indicators();
+    test_ground_obstacle();
     puts("hand-only guard: thresholds, fresh telemetry, old protocol, priority, recovery and haptics PASS");
     return 0;
 }

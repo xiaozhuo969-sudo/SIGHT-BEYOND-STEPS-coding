@@ -1,0 +1,19 @@
+手控地面障碍物提示补充
+需求：飞机未飞行时，在前方障碍范围内亮灯，手控马达震动 3 秒。
+范围：只修改手控报警/指示逻辑，飞控及无线协议均不修改。
+引脚：GPIO5 为障碍物指示灯（低电平亮），MOT0/GPIO18 为避障震动，MOT1/GPIO17 继续作为倾斜震动。
+地面：在有效 HC_TELEMETRY 测距 <=100cm 时 GPIO5 常亮，进入一次近距离事件触发 MOT0 3 秒；持续处于近距离不重复触发。地面包括 TX_READY、TX_ARM_REQUEST、TX_ALT_IDLE，无线必须处于 HC3 会话。
+解除：最新有效测距 >100cm 时地面灯灭；连续有效远距离数据稳定 >=500ms 后重新允许下一次近距离事件震动。无需 GPIO9 确认地面提示。
+异常：无效或 >=600ms 过期测距不点亮地面灯。无效/断流不会将震动事件重新装填，避免相同障碍重复震动；无线故障或会话重建按原逻辑重置报警。既有 3 秒震动结束后不持续震动。
+飞行：仍使用 guard.hold，<=100cm 触发飞行保持，GPIO5 闪烁；距离 >120cm 稳定 500ms 后按 GPIO9 确认解除，保持原逻辑。正常降落期间不新触发避障提示。
+隔离：新增 near_latched/range_near 只用于提示，地面不设置 guard.hold，不屏蔽手势，不发送解锁/起飞。倾斜报警优先于避障，两只马达互斥，避障脉冲可暂停后补足剩余时间。
+监测：@HC 新增 obstacle_alarm（震动事件状态）、obstacle_mode（0灭/1地面常亮/2飞行闪烁）、obstacle_led（GPIO5 输出指令状态），便于闭环确认。
+环境：Windows，ESP-IDF v6.0.3，Python idf6.0_py3.11_env，Xtensa esp-15.2.0_20251204；增量复用 D:/Espressif/sources/ground-tilt-20261006/hand 和 D:/Espressif/builds/hand-ground-tilt-20261006；本次精确源码快照见 D:/Espressif/logs/ground-obstacle-20261006/source-snapshot.json。
+编译：D:/Espressif/logs/ground-obstacle-20261006/build.ps1。应用分区和 SDK 配置继承前版，不改分区。
+测试：test_hand_feedback/test_tx_control/test_flight_keys/test_estop_cooldown 四组通过。新用例覆盖 100/101cm、地面灯常亮、只震动一次、无效/过期测距、远距离重新触发、时间回绕、地面 DISARM、降落/飞行模式及之前倾斜/急停回归。
+代码审核：新增指示状态不改变控制命令，飞控未修改；用户已有 project-documentation.txt 和 .vscode 改动保留。
+烧录：只写 0x10000 应用，先验证原机应用与 before-app.bin 一致，备份 bootloader/分区/NVS/应用区域 before-runtime-region.bin；烧录后 verify-flash，回读前64KB验证校准及分区保持。
+版本：修改前 backup/hand-ground-obstacle-before-20261006（beb3ad4），新提交及发布标签见 D:/Espressif/releases/hand-ground-obstacle-20261006/manifest.json。
+回退：代码 git revert 本次新提交；设备用发布目录 rollback-hand.ps1 恢复 before-app.bin 并校验（先停桨锁定、松开起飞键，脚本默认COM21），保留 NVS。
+实际编译、烧录、地面验收状态及证据：见发布 manifest.json、acceptance-result.json；代码模拟验证不代替实物灯光/震动确认。
+地面测试：飞机停桨且平放，手控 USB 连接，不按起飞键；先无遮挡，再在模块前30–50cm放纸板保持8秒，移开超过1m保持2秒，重复一次。确认GPIO5近距离常亮、移开熄灭、每次MOT0只震动3秒；锁定/起飞命令必须保持关闭。

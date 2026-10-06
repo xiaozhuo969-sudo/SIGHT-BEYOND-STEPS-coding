@@ -14,6 +14,8 @@ typedef struct {
     int8_t roll_direction, roll_candidate;
     uint8_t roll_samples;
     uint32_t roll_level_since;
+    bool range_valid, range_near, near_latched, near_clear_timing;
+    uint32_t near_clear_since;
 } hand_feedback_t;
 
 static inline void hand_feedback_expire(hand_feedback_t *s, uint32_t now)
@@ -22,6 +24,7 @@ static inline void hand_feedback_expire(hand_feedback_t *s, uint32_t now)
         s->ready=s->clear_timing=s->level_timing=false;
         s->tipped_samples=0;
         s->roll_samples=0;s->roll_candidate=0;s->roll_level_timing=false;
+        s->near_clear_timing=false;
         /* Missing data cannot clear a latched obstacle or create a new tilt edge. */
     }
 }
@@ -34,6 +37,12 @@ static inline void hand_feedback_sample(hand_feedback_t *s, uint32_t now,
     hand_feedback_expire(s,now);
     s->sampled=true;s->sample_ms=now;
     s->attitude_valid=attitude_valid;
+    s->range_valid=range_valid;s->range_near=range_valid && cm<=HAND_OBSTACLE_CM;
+    if (s->range_near) {s->near_latched=true;s->near_clear_timing=false;}
+    else if (range_valid && s->near_latched) {
+        if (!s->near_clear_timing) {s->near_clear_timing=true;s->near_clear_since=now;}
+        if ((uint32_t)(now-s->near_clear_since)>=HAND_CLEAR_DWELL_MS) s->near_latched=false;
+    } else s->near_clear_timing=false;
     if (obstacle_enabled && range_valid && cm<=HAND_OBSTACLE_CM) s->hold=true;
     if (s->hold && range_valid && cm>HAND_CLEAR_CM) {
         if (!s->clear_timing) {s->clear_timing=true;s->clear_since=now;}
@@ -72,4 +81,10 @@ static inline int hand_feedback_roll_indicator(const hand_feedback_t *s, uint32_
 {
     return s->sampled && s->attitude_valid &&
         (uint32_t)(now-s->sample_ms)<HAND_TELEMETRY_TIMEOUT_MS ? s->roll_direction : 0;
+}
+
+static inline bool hand_feedback_near_indicator(const hand_feedback_t *s, uint32_t now)
+{
+    return s->sampled && s->range_valid && s->range_near &&
+        (uint32_t)(now-s->sample_ms)<HAND_TELEMETRY_TIMEOUT_MS;
 }

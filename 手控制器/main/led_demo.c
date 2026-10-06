@@ -83,7 +83,7 @@ static void led_task(void *arg)
     (void)arg;
     ESP_LOGI(TAG,"LED GPIO air=12 camera=13 left=14 right=21 down=47");
     for(;;) {
-        bool air,obstacle; unsigned gesture; int test_pin,air_roll;
+        bool air; unsigned obstacle,gesture; int test_pin,air_roll;
         telemetry_indicator_snapshot(&air,&obstacle,&gesture,&test_pin,&air_roll);
         bool roles[LED_COUNT]={air,camera_uplink_healthy(),gesture==GESTURE_LEFT,
                               gesture==GESTURE_RIGHT,gesture==GESTURE_DOWN};
@@ -96,7 +96,9 @@ static void led_task(void *arg)
         if(test_pin<0)
             mask=hand_indicator_tilt(mask,air_roll,(esp_timer_get_time()/250000)%2==0);
         show_leds(mask);
-        gpio_set_level(ALARM_LED_GPIO,obstacle && (esp_timer_get_time()/250000)%2==0 ? 0:1);
+        bool obstacle_on=hand_indicator_obstacle(obstacle,(esp_timer_get_time()/250000)%2==0);
+        gpio_set_level(ALARM_LED_GPIO,obstacle_on ? 0:1);
+        telemetry_set_obstacle_led(obstacle_on);
         telemetry_set_led(mask!=0,mask);
         vTaskDelay(pdMS_TO_TICKS(25));
     }
