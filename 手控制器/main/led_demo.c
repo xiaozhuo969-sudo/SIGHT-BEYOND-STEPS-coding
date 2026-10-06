@@ -12,6 +12,7 @@
 #include "camera_uplink.h"
 #include "gesture.h"
 #include "esp_timer.h"
+#include "hand_indicator.h"
 
 // H5: GPIO9 palm; former LED1/LED2 are now flight buttons on GPIO10/11.
 // The remaining LEDs turn on at GPIO low; flight buttons read high at rest.
@@ -82,8 +83,8 @@ static void led_task(void *arg)
     (void)arg;
     ESP_LOGI(TAG,"LED GPIO air=12 camera=13 left=14 right=21 down=47");
     for(;;) {
-        bool air,obstacle; unsigned gesture; int test_pin;
-        telemetry_indicator_snapshot(&air,&obstacle,&gesture,&test_pin);
+        bool air,obstacle; unsigned gesture; int test_pin,air_roll;
+        telemetry_indicator_snapshot(&air,&obstacle,&gesture,&test_pin,&air_roll);
         bool roles[LED_COUNT]={air,camera_uplink_healthy(),gesture==GESTURE_LEFT,
                               gesture==GESTURE_RIGHT,gesture==GESTURE_DOWN};
         uint8_t mask=0;
@@ -92,6 +93,8 @@ static void led_task(void *arg)
             else for(unsigned r=0;r<LED_COUNT;++r)
                 if(s_role_pins[r]==(int)s_led_pins[i] && roles[r]) mask|=1U<<i;
         }
+        if(test_pin<0)
+            mask=hand_indicator_tilt(mask,air_roll,(esp_timer_get_time()/250000)%2==0);
         show_leds(mask);
         gpio_set_level(ALARM_LED_GPIO,obstacle && (esp_timer_get_time()/250000)%2==0 ? 0:1);
         telemetry_set_led(mask!=0,mask);

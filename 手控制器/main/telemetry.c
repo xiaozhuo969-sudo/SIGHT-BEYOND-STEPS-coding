@@ -230,7 +230,7 @@ void telemetry_set_button(bool pressed)
     portEXIT_CRITICAL(&s_mux);
 }
 
-void telemetry_indicator_snapshot(bool *air, bool *obstacle, unsigned *gesture, int *test_pin)
+void telemetry_indicator_snapshot(bool *air, bool *obstacle, unsigned *gesture, int *test_pin, int *air_roll)
 {
     uint32_t now=(uint32_t)(esp_timer_get_time()/1000);
     portENTER_CRITICAL(&s_mux);
@@ -243,6 +243,7 @@ void telemetry_indicator_snapshot(bool *air, bool *obstacle, unsigned *gesture, 
     if(s_tx.guard.hold && !(s_tx.phase==TX_ALT_MANUAL && *gesture==GESTURE_DOWN))
         *gesture=GESTURE_UNKNOWN;
     *test_pin=s_led_test_pin;
+    *air_roll=hand_feedback_roll_indicator(&s_tx.guard,now);
     portEXIT_CRITICAL(&s_mux);
 }
 void telemetry_set_led(bool enabled, unsigned pattern)

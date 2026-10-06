@@ -8,10 +8,10 @@ static bool airborne(const tx_control_t *s)
 }
 void tx_guard_refresh(tx_control_t *s, uint32_t now)
 {
-    if (!airborne(s)) s->guard=(hand_feedback_t){0};
+    if (s->phase==TX_OFF || s->phase==TX_FAULT) s->guard=(hand_feedback_t){0};
     else {
         hand_feedback_expire(&s->guard,now);
-        if (s->phase==TX_ALT_LAND)
+        if (!airborne(s) || s->phase==TX_ALT_LAND)
             s->guard.hold=s->guard.ready=s->guard.clear_timing=false;
     }
 }
@@ -247,9 +247,10 @@ void tx_feedback(tx_control_t *s, const uint8_t packet[32], uint32_t now)
                     s->air_command==HC_TAKEOFF && s->air_reason!=HC_OK) phase(s,TX_ALT_IDLE,now);
         }
         tx_guard_refresh(s,now);
-        if(p.command==HC_TELEMETRY && airborne(s))
+        if(p.command==HC_TELEMETRY)
             hand_feedback_sample(&s->guard,now,s->air_distance_valid,s->air_distance_cm,
-                s->air_attitude_valid,s->air_pitch_cdeg,s->air_roll_cdeg,s->phase!=TX_ALT_LAND);
+                s->air_attitude_valid,s->air_pitch_cdeg,s->air_roll_cdeg,
+                airborne(s) && s->phase!=TX_ALT_LAND);
         return;
     }
 

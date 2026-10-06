@@ -2,6 +2,7 @@
 #include <stdio.h>
 #include <string.h>
 #include "tx_control.h"
+#include "hand_indicator.h"
 #include "../../shared/hand_protocol.h"
 #include "../../shared/haptic_policy.h"
 
@@ -128,9 +129,55 @@ static void test_invalid_and_session(void)
     telem(&s,1300,3,121,0,0);telem(&s,1600,3,121,0,0);
     telem(&s,1900,1,HC_DISTANCE_UNKNOWN,0,0);assert(s.guard.hold&&!s.guard.ready);
     tx_fault(&s);assert(tx_start_v3(&s,2000,55)&&!s.guard.hold&&!s.guard.sampled);
-    /* Locked preflight telemetry never creates alarm events. */
+    /* Locked preflight reports tilt, but must never latch obstacle control. */
     reply(&s,2050,HC_TELEMETRY,3,50,3000,0);
-    reply(&s,2100,HC_TELEMETRY,3,50,3000,0);assert(!s.guard.hold&&!s.guard.tilt);
+    reply(&s,2100,HC_TELEMETRY,3,50,3000,0);assert(!s.guard.hold&&s.guard.tilt);
+}
+
+static void test_ground_tilt_indicators(void)
+{
+    tx_control_t s={0};assert(tx_start_v3(&s,1000,42));
+    uint8_t b[32];hc_packet_t p={.version=3,.command=HC_TELEMETRY,.session=42,
+        .assist=3,.channels={0,HC_OK,1000,HC_DISARM,0,0,(uint16_t)-2001,50}};
+    for(unsigned i=0;i<2;++i) {
+        p.sequence=++s.sequence;hc_encode(&p,b);tx_feedback(&s,b,1100+i*300);
+        assert(s.phase==TX_READY&&!s.guard.hold&&!s.guard.ready);
+        assert(s.guard.tilt==(i==1));
+    }
+    assert(hand_feedback_roll_indicator(&s.guard,1400)==-1);
+    assert(hand_indicator_tilt(1|2|8|16,-1,true)==(1|2|4|16));
+    assert(hand_indicator_tilt(1|2|8|16,-1,false)==(1|2|16));
+    assert(hand_indicator_tilt(1|2|4|16,1,true)==(1|2|8|16));
+    assert(hand_indicator_tilt(1|2|4|16,1,false)==(1|2|16));
+    assert(hand_indicator_tilt(31,0,false)==31);
+    assert(hand_feedback_roll_indicator(&s.guard,1999)==-1);
+    assert(hand_feedback_roll_indicator(&s.guard,2000)==0);
+    tx_guard_refresh(&s,2000);assert(s.guard.tilt&&!s.guard.hold);
+    /* Old status traffic cannot refresh attitude or manufacture another pulse. */
+    p.command=HC_STATUS;p.sequence=++s.sequence;hc_encode(&p,b);tx_feedback(&s,b,2001);
+    assert(hand_feedback_roll_indicator(&s.guard,2001)==0);
+    p.command=HC_TELEMETRY;p.channels[6]=0;
+    for(unsigned i=0;i<3;++i) {
+        p.sequence=++s.sequence;hc_encode(&p,b);tx_feedback(&s,b,2100+i*300);
+    }
+    assert(!s.guard.tilt&&hand_feedback_roll_indicator(&s.guard,2700)==0);
+    p.channels[6]=2001;
+    p.sequence=++s.sequence;hc_encode(&p,b);tx_feedback(&s,b,3000);
+    assert(!s.guard.tilt&&hand_feedback_roll_indicator(&s.guard,3000)==0);
+    /* Duplicate, CRC error and wrong session cannot count as a second sample. */
+    tx_feedback(&s,b,3001);assert(!s.guard.tilt);
+    b[20]^=1;tx_feedback(&s,b,3002);assert(!s.guard.tilt);
+    p.session=99;p.sequence=++s.sequence;hc_encode(&p,b);tx_feedback(&s,b,3003);
+    assert(!s.guard.tilt);
+    p.session=42;p.sequence=++s.sequence;hc_encode(&p,b);tx_feedback(&s,b,3300);
+    assert(s.guard.tilt&&hand_feedback_roll_indicator(&s.guard,3300)==1);
+    p.assist=2;p.channels[5]=p.channels[6]=HC_ATTITUDE_UNKNOWN;
+    p.sequence=++s.sequence;hc_encode(&p,b);tx_feedback(&s,b,3600);
+    assert(hand_feedback_roll_indicator(&s.guard,3600)==0);
+    /* Ground alarm is purely an indication: transmitted command remains DISARM. */
+    s.heartbeat=3600;assert(tx_step(&s,3600,true,true,moving,out));tx_encode(&s,out,b);
+    assert(hc_decode(b,&p)&&p.command==HC_DISARM&&p.channels[2]==1000);
+    tx_fault(&s);assert(!s.guard.tilt&&!s.guard.roll_direction);
 }
 
 static void test_haptics(void)
@@ -150,6 +197,7 @@ static void test_haptics(void)
 int main(void)
 {
     test_policy();test_wire_and_recovery();test_invalid_and_session();test_haptics();
+    test_ground_tilt_indicators();
     puts("hand-only guard: thresholds, fresh telemetry, old protocol, priority, recovery and haptics PASS");
     return 0;
 }

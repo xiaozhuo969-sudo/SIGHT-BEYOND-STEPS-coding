@@ -1,0 +1,19 @@
+手控地面及飞行倾斜报警
+需求来源：用户确认飞机静止歪斜时也需手控震动、对应左右灯闪烁，并授权修改、烧录、版本管理。
+范围：仅手控制器工程，不修改飞控或无线协议。
+依据：main/tx_control.c 接收并校验 HC_TELEMETRY，地面回传包含姿态；main/hand_feedback.h 原倾斜报警阈值 20 度；main/led_demo.c 左灯 GPIO14、右灯 GPIO21；震动通道 MOT1/GPIO17。
+行为：飞控有效横滚/俯仰绝对值 >20 度，连续两帧，触发一次 MOT1 震动 3 秒。静止锁定状态也判断姿态，地面障碍距离不触发飞行控制。
+方向：横滚 < -20 度连续两帧为左，GPIO14；>20 度连续两帧为右，GPIO21。只使用飞机回传，不应用手控的手势轴交换/反向配置。实物左右朝向尚需地面确认。
+灯光：报警每 250ms 切换亮灭，周期 500ms。报警优先于左右手势常亮，其余状态灯/下降灯保持原逻辑；逐灯诊断模式仍优先。
+解除：横滚回到 (-15,15) 度并连续有效 500ms，解除方向报警；横滚及俯仰均回到该范围并连续有效 500ms，解除倾斜震动锁存。恢复后再次越限可触发新的 3 秒震动，持续倾斜不重复震动。
+异常：600ms 无新姿态帧或最新姿态无效，不显示飞机方向报警；状态帧、重复帧、CRC 错误、错误会话不能代替有效姿态样本。过期数据不清除倾斜锁存，不制造反复震动。断开会话/无线故障重置报警，重新连接须重新采样。
+控制：倾斜仅提示，不改变飞机解锁/起飞/定高/急停命令。地面仍发送锁定 DISARM。避障原流程、震动互斥与倾斜优先保留。
+版本：修改前标签 backup/hand-ground-tilt-before-20261006；修复提交及发布标签见 D:/Espressif/releases/hand-ground-tilt-20261006/manifest.json。
+备份：D:/Espressif/logs/ground-tilt-20261006/before-source.bundle、before-hand-source.zip、before-flash.bin（手控整片 16MB 实际回读）。
+工具：Windows PowerShell，ESP-IDF v6.0.3，idf6.0_py3.11_env，Xtensa esp-15.2.0_20251204；构建从 ASCII 路径 D:/Espressif/sources/ground-tilt-20261006/hand，构建输出 D:/Espressif/builds/hand-ground-tilt-20261006。
+构建：执行 D:/Espressif/logs/ground-tilt-20261006/build.ps1；脚本明确设置工具路径。配置继承此前手控发布版本，factory 从 0x10000 开始，大小 2MB。
+测试：MinGW GCC -std=c11 -Wall -Wextra -Werror，test_hand_feedback、test_tx_control、test_flight_keys、test_estop_cooldown；本次均通过，证据 native-tests.log。覆盖地面两帧倾斜、左右闪烁优先/灭相、20度边界（原测试）、15度滞回、过期/无效/重复/CRC/会话、报警不解锁、不触发地面避障、10秒急停冷却及原控制回归。
+编译/烧录/设备测试：详细实际完成状态见发布目录 manifest.json；地面实测未完成项不得按软件模拟测试宣称硬件通过。
+烧录：只写手控应用 0x10000，保留 bootloader、分区表、NVS 校准；用 esptool verify-flash 及回读确认。
+回退代码：git revert 本次修复提交。回退设备：先停桨锁定，备份现有校准；用 before-flash.bin 中 factory 区域恢复原应用并回读验证（需使用匹配应用镜像有效长度）。完整整片备份可恢复原状态，但会同时恢复旧 NVS。仅回退源码不能改变已烧录设备。
+验收：飞机停桨、手控平放。飞机左倾/右倾 >20 度，对应灯闪烁、MOT1 一次震动 3 秒；保持倾斜不重复；恢复水平稳定后再倾斜重新触发；手控自身倾斜只按原手势常亮；停飞机供电后过期姿态不继续闪烁。
