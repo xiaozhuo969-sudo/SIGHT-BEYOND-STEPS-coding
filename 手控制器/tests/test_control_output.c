@@ -51,7 +51,8 @@ static void test_forward_only_in_live_control(void)
     for(unsigned i=0;i<sizeof(stages)/sizeof(stages[0]);++i) {
         const unsigned stage=stages[i];
         tx_control_t tx={.v2=true,.v3=true,.session=1,.phase=stage,
-            .since=1000,.heartbeat=1000,.feedback=true,.feedback_ms=1000};
+            .since=1000,.heartbeat=1000,.feedback=true,.feedback_ms=1000,
+            .telemetry=true,.telemetry_ms=1000,.air_distance_valid=true,.air_distance_cm=200};
         assert(tx_step(&tx,1000,true,true,forward,out));
         tx_encode(&tx,out,bytes);assert(hc_decode(bytes,&packet));
         const bool live=stage==TX_ALT_LIVE||stage==TX_ALT_MANUAL;

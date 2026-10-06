@@ -1,6 +1,6 @@
 param(
     [ValidatePattern('^COM[0-9]+$')][string]$Port,
-    [string]$FirmwareDirectory='D:\Espressif\releases\feedback-leds-2026-10-06\hand',
+    [string]$FirmwareDirectory='D:\Espressif\releases\hand-only-2026-10-06\hand',
     [switch]$CheckOnly
 )
 $ErrorActionPreference='Stop'

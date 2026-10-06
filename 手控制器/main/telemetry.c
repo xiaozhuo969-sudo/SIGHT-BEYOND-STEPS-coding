@@ -225,6 +225,8 @@ void telemetry_set_button(bool pressed)
     if(pressed && !s_state.button && !s_keys.down[1] && !s_keys.stop_latched)
         tx_clear_obstacle(&s_tx,(uint32_t)(esp_timer_get_time()/1000));
     s_state.button = pressed;
+    /* A palm edge can clear the local latch before the next 50 ms gesture tick. */
+    if(pressed) for(unsigned i=0;i<4;++i) s_preview[i]=1500;
     if (pressed) ++s_state.presses;
     portEXIT_CRITICAL(&s_mux);
 }
@@ -236,9 +238,11 @@ void telemetry_indicator_snapshot(bool *air, bool *obstacle, unsigned *gesture, 
     bool fresh=s_tx.feedback && s_tx.phase!=TX_OFF && s_tx.phase!=TX_FAULT &&
                s_tx.phase!=TX_STOPPING && (uint32_t)(now-s_tx.feedback_ms)<300;
     *air=fresh && !s_tx.link_warning;
-    *obstacle=fresh && (s_tx.air_flags&HC_FLAG_OBSTACLE);
+    *obstacle=s_tx.guard.hold;
     *gesture=s_control_gesture.valid && s_state.imu &&
         esp_timer_get_time()-s_state.attitude_us<500000 ? s_signal : GESTURE_UNKNOWN;
+    if(s_tx.guard.hold && !(s_tx.phase==TX_ALT_MANUAL && *gesture==GESTURE_DOWN))
+        *gesture=GESTURE_UNKNOWN;
     *test_pin=s_led_test_pin;
     portEXIT_CRITICAL(&s_mux);
 }
@@ -311,13 +315,13 @@ static void control_task(void *arg)
         flight_keys_tick(&s_keys,&s_tx,now_ms,s_state.rc_ready,fresh,
             s_gesture.calibrated && s_signal==GESTURE_FLAT,
             s_gesture.calibrated && s_gesture.phase==1,s_state.button);
-        bool alarm_fresh=s_tx.feedback && (uint32_t)(now_ms-s_tx.feedback_ms)<300;
-        bool obstacle_alarm=(s_tx.air_flags&HC_FLAG_OBSTACLE)!=0;
-        bool tilt_alarm=(s_tx.air_flags&HC_FLAG_TILT)!=0;
+        tx_guard_refresh(&s_tx,now_ms);
+        bool obstacle_alarm=s_tx.guard.hold;
+        bool tilt_alarm=s_tx.guard.tilt;
         portEXIT_CRITICAL(&s_mux);
         // Outside telemetry's lock: motor publication takes this same lock.
-        // Do not turn a stale packet into an artificial new rising alarm edge.
-        if(alarm_fresh) vibration_alerts(obstacle_alarm,tilt_alarm);
+        // Stale telemetry leaves local alarms latched; no artificial rising edges.
+        vibration_alerts(obstacle_alarm,tilt_alarm);
         xTaskDelayUntil(&wake,pdMS_TO_TICKS(50));
     }
 }
@@ -422,6 +426,7 @@ static void telemetry_task(void *arg)
                "\"tx_v3\":%u,\"tx_can_takeoff\":%u,\"air_stage\":%u,\"air_height_valid\":%u,\"air_ground_ready\":%u,"
                "\"air_height_mm\":%u,\"air_relative_mm\":%d,\"air_collective\":%u,\"air_radio_faults\":%u,\"air_detail_age_ms\":%ld,"
                "\"link_warning\":%u,\"tx_can_resume\":%u,\"air_resume_ready\":%u,"
+               "\"guard_hold\":%u,\"guard_ready\":%u,\"tilt_alarm\":%u,"
                "\"tx_rx_us\":%lu,\"tx_rx_max_us\":%lu,\"tx_rx_late\":%lu,"
                "\"reject_schema\":%lu,\"reject_session\":%lu,\"reject_sequence\":%lu,"
                "\"air_rx_gap_ms\":%u,\"air_rx_max_gap_ms\":%u,\"air_first_event\":%u,\"air_diag_age_ms\":%ld,"
@@ -461,6 +466,7 @@ static void telemetry_task(void *arg)
                tx.air_stage,tx.air_height_valid,tx.air_ground_ready,tx.air_height_mm,tx.air_relative_mm,
                tx.air_collective,tx.air_radio_faults,tx.detail?(long)(uint32_t)((uint32_t)(now/1000)-tx.detail_ms):-1L,
                tx.link_warning,tx_can_resume(&tx,(uint32_t)(now/1000),gesture.valid&&settings.calibrated&&gesture.signal==GESTURE_FLAT),tx.resume_ready,
+               tx.guard.hold,tx.guard.ready,tx.guard.tilt,
                (unsigned long)tx_rx_us,(unsigned long)tx_rx_max_us,(unsigned long)tx_rx_late,
                (unsigned long)tx.rejected_schema,(unsigned long)tx.rejected_session,(unsigned long)tx.rejected_sequence,
                tx.air_rx_gap_ms,tx.air_rx_max_gap_ms,tx.air_first_event,

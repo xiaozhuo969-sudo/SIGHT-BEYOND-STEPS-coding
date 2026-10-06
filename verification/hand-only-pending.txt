@@ -1,6 +1,0 @@
-2026-10-06: Flight rollback complete; hand-only redesign awaits user confirmation.
-Flight sources and shared/hand_protocol.h match baseline-2026-10-06.
-Hand sources have deliberately not been redesigned yet and still reference the removed protocol extensions.
-This intermediate tree is not a build/flash release. Earlier binaries implement the superseded two-sided design.
-Remove this marker only after the confirmed hand-only changes, compatibility tests, build and release preparation are complete.
-See ../hand-only-adjustment-plan.txt and flight-rollback.json.

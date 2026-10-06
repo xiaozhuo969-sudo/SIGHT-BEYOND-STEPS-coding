@@ -1,9 +1,6 @@
-param([ValidateSet('Hand','Flight','All','Test')] [string]$Target='All')
+param([ValidateSet('Hand','Test')] [string]$Target='Hand')
 $ErrorActionPreference='Stop'
 $projectRoot=Split-Path -Parent $PSScriptRoot
-if(Test-Path -LiteralPath "$projectRoot\verification\hand-only-pending.txt") {
-    throw 'Flight rollback complete; hand-only redesign is pending confirmation. This transitional tree must not be built as a release.'
-}
 $installRoot='D:\Espressif'
 $env:PYTHONUTF8='1'
 $env:IDF_TOOLS_PATH="$installRoot\tools"
@@ -25,23 +22,14 @@ function Ensure-Junction([string]$Link,[string]$Destination) {
 New-Item -ItemType Directory -Path "$installRoot\work\air","$installRoot\builds" -Force | Out-Null
 Ensure-Junction "$installRoot\work\hand" "$projectRoot\手控制器"
 Ensure-Junction "$installRoot\work\shared" "$projectRoot\shared"
-Ensure-Junction "$installRoot\work\air\flight" "$projectRoot\官方小飞机的程序\主控程序(keil MDK打开)+外扩激光+光流20261001"
-if($Target -in @('Hand','All')) {
+if($Target -eq 'Hand') {
     . "$env:IDF_PATH\export.ps1"
     & $testPython "$PSScriptRoot\stage_hand.py" --source-root $projectRoot --destination "$installRoot\sources\feedback"
     Check-Result
-    $handBuild="$installRoot\builds\hand-release"
+    $handBuild="$installRoot\builds\hand-only-release"
     New-Item -ItemType Directory -Path $handBuild -Force | Out-Null
     Copy-Item -LiteralPath "$projectRoot\手控制器\sdkconfig" -Destination "$handBuild\sdkconfig" -Force
     & python "$env:IDF_PATH\tools\idf.py" -C "$installRoot\sources\feedback\hand" -B $handBuild -D "SDKCONFIG=$handBuild\sdkconfig" build
-    Check-Result
-}
-if($Target -in @('Flight','All')) {
-    $env:FLIGHT_ROOT="$installRoot\work\air\flight"
-    $env:FLIGHT_BUILD_DIR="$installRoot\builds\flight-feedback"
-    & $testPython "$env:FLIGHT_ROOT\port\build.py"
-    Check-Result
-    & $testPython "$env:FLIGHT_ROOT\port\verify.py"
     Check-Result
 }
 if($Target -eq 'Test') {

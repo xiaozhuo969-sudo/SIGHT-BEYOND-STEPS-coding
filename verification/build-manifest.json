@@ -66,8 +66,9 @@
   "led_active_level": 0,
   "led_release_hand_build_log": "D:/Espressif/logs/hand-leds-build.log",
   "flight_validation_note": "Unchanged from ad391ca; prior 245 compiled-ELF checks retained, no repeat required for hand LED mapping.",
-  "current_use": "SUPERSEDED: historical two-sided release; do not flash. Current source is hand-only transition pending user confirmation.",
+  "current_use": "SUPERSEDED historical two-sided release; do not flash. Current verified hand-only release is recorded in hand-only-build-manifest.json.",
   "superseded_on": "2026-10-06",
   "current_plan": "hand-only-adjustment-plan.txt",
-  "rollback_record": "verification/flight-rollback.json"
+  "rollback_record": "verification/flight-rollback.json",
+  "current_release_manifest": "verification/hand-only-build-manifest.json"
 }

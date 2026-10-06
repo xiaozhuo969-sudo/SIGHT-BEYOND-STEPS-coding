@@ -7,7 +7,7 @@ sources={
     'tx_control':['tx_control'], 'flight_keys':['flight_keys','tx_control'],
     'control_output':['control_output','gesture','remote_protocol','tx_control'],
     'remote_protocol':['remote_protocol'], 'hud_protocol':['../../shared/hud_protocol'],
-    'flight_feedback':['tx_control'],
+    'hand_feedback':['tx_control'],
 }
 with tempfile.TemporaryDirectory(prefix='hand-tests-') as directory:
     for name, units in sources.items():

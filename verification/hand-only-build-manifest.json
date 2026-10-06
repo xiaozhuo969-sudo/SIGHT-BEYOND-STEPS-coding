@@ -1,0 +1,69 @@
+{
+  "release": "hand-only-2026-10-06",
+  "date": "2026-10-06",
+  "status": "COMPILED_AND_NATIVE_TESTED_NOT_FLASHED",
+  "architecture": "hand-only; original aircraft firmware and original HC3 protocol unchanged",
+  "flight_baseline_commit": "c553144b31400812e187e00be3b5b88dbbc4630a",
+  "flight_baseline_comparison": "PASS",
+  "flight_tracked_files_unchanged": 150,
+  "shared_protocol_unchanged": true,
+  "native_test_executables_passed": 8,
+  "native_test_log": "D:/Espressif/logs/hand-only-native-tests.log",
+  "firmware_build": "PASS",
+  "build_log": "D:/Espressif/logs/hand-only-build.log",
+  "idf_version": "v6.0.3",
+  "idf_commit": "76f5dedd9950a3012fee8fb7d5586df21fc67802",
+  "xtensa_gcc": "esp-15.2.0_20251204",
+  "cmake": "4.0.3",
+  "ninja": "1.12.1",
+  "build_directory": "D:\\Espressif\\builds\\hand-only-release",
+  "staged_input_files_verified": 460,
+  "staging_manifest_sha256": "49b121658a7e7d5092137a5878b09bcc00871e9adb587a0ef49e07682f4eb05d",
+  "sdkconfig_unchanged": true,
+  "generated_sdkconfig_header_matches_previous_build": true,
+  "hand_app_partition_bytes": 1048576,
+  "hand_app_bytes": 1048240,
+  "hand_app_free_bytes": 336,
+  "artifacts": {
+    "bootloader/bootloader.bin": {
+      "bytes": 21232,
+      "sha256": "a2a257b6a82bf2ef330ef368689f9340caa6cf813e09d7fa909c9e87ce7048ed"
+    },
+    "partition_table/partition-table.bin": {
+      "bytes": 3072,
+      "sha256": "7f00b6c042a89b15b0cac534f82ed988caf29278ff5700b0c511eb1b5bb7c820"
+    },
+    "hand_controller_imu.bin": {
+      "bytes": 1048240,
+      "sha256": "efeadac62b00f02f05cb6c38d79ea1b260847c6d8569bf1d9519566060627013"
+    }
+  },
+  "obstacle_cm": 100,
+  "clear_cm_strictly_greater_than": 120,
+  "clear_dwell_ms": 500,
+  "telemetry_timeout_ms": 600,
+  "tilt_trigger_cdeg_strictly_greater_than": 2000,
+  "tilt_consecutive_packets": 2,
+  "tilt_clear_cdeg_strictly_less_than": 1500,
+  "tilt_clear_dwell_ms": 500,
+  "motor_duration_ms": 3000,
+  "motor_percent": 80,
+  "led_gpio": {
+    "air_link": 12,
+    "camera_ack": 13,
+    "left": 14,
+    "right": 21,
+    "down": 47,
+    "obstacle_alarm": 5
+  },
+  "hardware_flashed": false,
+  "new_firmware_hardware_tested": false,
+  "prior_motor_test": "Old firmware, 2 seconds per channel, user confirmed both motors vibrated and telemetry returned zero. Does not validate this 3-second release.",
+  "limitations": [
+    "Aircraft range/attitude telemetry nominal 300 ms; no source sample timestamp in original protocol.",
+    "Altitude hold depends on original altitude control; horizontal position retention depends on original optical flow.",
+    "Original takeoff ramp and manual height-loss recovery retained.",
+    "Application partition nearly full; only 336 bytes free.",
+    "Flight-loop and LED/3-second motor behavior not yet validated on hardware."
+  ]
+}

@@ -1,6 +1,7 @@
 #pragma once
 #include <stdbool.h>
 #include <stdint.h>
+#include "hand_feedback.h"
 
 /* Keep published phase IDs stable; obsolete stick-unlock phases are removed. */
 enum { TX_OFF=0, TX_READY=1, TX_STOPPING=9, TX_FAULT=10, TX_ARM_REQUEST=11,
@@ -10,9 +11,7 @@ enum { TX_REASON_NONE, TX_REASON_STOP, TX_REASON_HEARTBEAT, TX_REASON_IMU, TX_RE
        TX_REASON_FEEDBACK, TX_REASON_ARM_TIMEOUT, TX_REASON_AIR_LOCK };
 typedef struct {
     unsigned phase, reason, sent;
-    bool obstacle_clear_pending;
-    uint32_t obstacle_clear_ms;
-    uint16_t obstacle_clear_sequence;
+    hand_feedback_t guard;
     uint32_t since, heartbeat;
     uint16_t aux;
     bool v2, feedback, v3, detail;
@@ -36,6 +35,7 @@ typedef struct {
     uint32_t telemetry_ms, air_telem_frames, air_telem_gap_ms, air_telem_max_gap_ms;
 } tx_control_t;
 bool tx_clear_obstacle(tx_control_t *s, uint32_t now);
+void tx_guard_refresh(tx_control_t *s, uint32_t now);
 bool tx_arm(tx_control_t *s, uint32_t now, bool flat_calibrated);
 void tx_stop(tx_control_t *s, uint32_t now, unsigned reason);
 void tx_fault(tx_control_t *s);

@@ -1,62 +1,34 @@
-【已停用：2026-10-06】以下是旧双端方案的历史烧录说明，请勿继续照此烧录。
-当前改为原飞控不动、仅调整手控。新版手控方案尚待确认，未生成可烧录版本。
-详见工程 hand-only-adjustment-plan.txt。
+小飞机——仅手控更新版 hand-only-2026-10-06
+本包只含 ESP32-S3 手控制器固件；飞控保持原版，无需更新摄像头。
 
-小飞机五路灯版本：feedback-leds-2026-10-06
+烧录目录：D:\Espressif\releases\hand-only-2026-10-06
+1. 使用数据 USB 线连接手控，设备管理器查看实际 COM 编号，关闭占用串口的上位机。
+2. PowerShell 执行（COM21 是此前检测到的端口，重新插拔后请核对）：
+   & 'D:\Espressif\releases\hand-only-2026-10-06\flash_hand.ps1' -CheckOnly
+   & 'D:\Espressif\releases\hand-only-2026-10-06\flash_hand.ps1' -Port COM21
+   移动包目录时增加 -FirmwareDirectory '新的目录\hand'。
+3. 脚本先校验三个文件 SHA256，再写入并校验，不执行 erase-all，不擦除 NVS 数据区。
+   下载连接失败时使用板上原 BOOT/RESET 操作进入下载模式，再重试。
 
-交付目录：D:\Espressif\releases\feedback-leds-2026-10-06
-本版本已编译，尚未连接硬件烧录或实飞测试。
+参数沿用工程：ESP32-S3、DIO、80 MHz、16 MB。
+0x000000  hand\bootloader\bootloader.bin
+0x008000  hand\partition_table\partition-table.bin
+0x010000  hand\hand_controller_imu.bin
+单独应用 BIN 不要写到 0x000000。不要使用旧 feedback-leds 双端方案包。
 
-灯光定义（均低电平点亮）
-LED3 / GPIO12：飞控通信正常常亮；匹配会话回复超过 300 ms 或链路警告时熄灭。
-LED4 / GPIO13：相机上传 ACK 正常常亮；超过 1000 ms 无匹配 ACK 时熄灭。
-LED5 / GPIO14：左倾手势亮。
-LED6 / GPIO21：右倾手势亮。
-SW1  / GPIO47：下垂产生下降手势时亮。
-以上为软件用途；未验证它们在手套上的位置或大小。
-H6 / GPIO5 是另外一路独立避障灯，保持期间每 250 ms 翻转。
-GPIO9 掌心、GPIO10 起飞、GPIO11 急停仍为输入，不接作灯输出。
+新功能
+原飞控测距 <=1 m 时，手控锁存、四通道中立，原定高有效时保持高度并停止水平动作。
+距离 >1.2 m 的新遥测覆盖至少 500 ms 后，按一下掌心解除，按住仍中立，松开恢复手势。
+飞机任意一轴 >20 度（绝对值）连续两包触发 MOT1；两轴 <15 度并覆盖至少 500 ms 解除。
+MOT0 避障、MOT1 倾斜各 3 s；倾斜优先、互斥。高度失效时仍保留原手动升降控制。
+GPIO12 飞控通信、13 相机 ACK、14 左倾、21 右倾、47 下垂下降；GPIO5 避障闪烁。
 
-一、烧录 ESP32-S3 手控制器
-1. 拆下飞机螺旋桨进行台架检查；将手控制器通过数据 USB 线连接电脑。
-2. 从设备管理器“端口”查看实际 COM 编号，关闭占用串口的上位机/串口助手。
-3. PowerShell 中执行下面命令。COM5 仅为示例，必须换成手控制器实际端口。
-   & 'D:\Espressif\releases\feedback-leds-2026-10-06\flash_hand.ps1' -CheckOnly
-   & 'D:\Espressif\releases\feedback-leds-2026-10-06\flash_hand.ps1' -Port COM5
-   如果把包移到其他目录，增加 -FirmwareDirectory '新的目录\hand' 参数。
-4. 脚本先核对三个固件的 SHA256，再调用已安装的 esptool 写入并校验，成功后复位。
-   若连接失败，需要按板子原有 BOOT/RESET 操作进入下载模式，然后重试。
-   此脚本无需先激活 IDF，不执行 erase-all，不擦除手控 NVS 数据区。
+台架核验
+先拆下飞机螺旋桨进行 IO/通信检查；本包尚未执行烧录或实飞验收。
+USB 遥测字段 guard_hold=1 表示手控保持锁存，guard_ready=1 表示可按键解除，tilt_alarm=1 表示飞机倾斜报警。
+马达命令 @M,0,80,3000 或 @M,1,80,3000，可分别测试 3 s 定时关闭；报警运行时拒绝测试命令。
+逐灯命令 @L,TEST,12（或 13/14/21/47），10 秒超时，@L,TEST,-1 退出恢复业务指示；测试期间不能起飞。
+在锁定阶段测距不会触发飞行避障锁存，这是预期行为；完整闭环应按受控联调流程检验。
+此前两路各 2 s 的实物震动已由用户确认，新版 3 s、灯光、定高与恢复仍需实测。
 
-手控烧录工具参数：ESP32-S3，DIO，80 MHz，16 MB（沿用工程配置）。
-0x000000：hand\bootloader\bootloader.bin
-0x008000：hand\partition_table\partition-table.bin
-0x010000：hand\hand_controller_imu.bin
-不要把单独的应用 BIN 写到 0x000000。
-应用大小 1047632 字节，1 MiB 应用分区剩余 944 字节。
-
-二、STM32 飞控配套固件
-flight\official_hand.hex 和 official_hand.elf 沿用上一阶段已编译、245 项 ELF 仿真通过的版本。
-手控灯映射不需要修改飞控，但前向避障保持/按键解除/倾斜回传必须使用此配套飞控固件。
-仅更新手控制器不能给旧飞控增加上述功能；摄像头固件无需更新。
-STM32 使用调试下载器烧录，与 ESP32 手控 COM 脚本不同。
-必须先读取并保存实机 Flash，特别是 0x08007C00..0x08007FFF 校准页。
-使用 HEX/ELF 所带地址，不执行整片擦除；若下载工具会擦除此校准页，需先合入原校准数据再写入。
-下载后读取该页，与备份逐字节核对；失败时不得继续起飞。
-HEX 的数据未覆盖此校准页，但下载工具的擦除策略仍需核对。
-旧 port/flash.py 依赖原 Linux 环境，不能直接当作本机 Windows 下载入口。
-本包不提供直接整片写入的 template.bin，避免覆盖实机校准页。
-当前未连接实机或识别 STM32 下载器，因此尚未执行上述备份、写入或回读。
-
-三、台架核对
-通信建立后观察 GPIO12；相机 ACK 正常时观察 GPIO13。
-左倾、右倾、下垂分别观察 GPIO14、21、47，正常平放不点亮这三路。
-逐灯定位工具：
-  D:\Espressif\test-python\Scripts\python.exe E:\APP\flay_111\小飞机\tools\identify_leds.py --port COM5
-每次测试 10 秒，-1 退出测试恢复业务灯；测试期间不能起飞。
-完整避障台架验收需具备有效定高/光流飞行状态：前方 <=1 m 锁存保持，GPIO5 闪烁、MOT0/GPIO18 震动 3 秒。
-距离 >1.2 m 持续 500 ms 且新测距确认后，新按一次掌心按钮解除；不需要平放。
-飞机倾角超过 30 度持续 200 ms 触发 MOT1/GPIO17，倾斜优先，两路不同时震动。
-先核对按键、急停、失联及 IO，再开展受控飞行测试；1 m 是触发阈值，并非已验证制动距离。
-
-详细条件、验证记录及 Git 回退信息见包内 project-documentation.txt 和 build-manifest.json。
+详细规则和条件见 project-documentation.txt；编译大小、测试结果和 SHA256 见 build-manifest.json。
