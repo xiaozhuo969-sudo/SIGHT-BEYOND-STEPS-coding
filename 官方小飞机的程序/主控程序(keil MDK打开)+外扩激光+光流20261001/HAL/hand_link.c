@@ -21,9 +21,17 @@ static uint16_t input[8]={1500,1500,1500,1500,2000,1000,1000,1000};
 #define TAKEOFF_AIR_CAP 650.0f
 #define TAKEOFF_BASE_RAMP_MS 2000.0f
 #define TAKEOFF_BOOST_LIFT_MM 50U
+#define TAKEOFF_TARGET_HEIGHT_MM 1000.0f
+#define TAKEOFF_CLIMB_MM_S 200.0f
+#define TAKEOFF_CLIMB_ACCEL_MM_S2 150.0f
+#define TAKEOFF_SETTLE_MS 500U
+static bool takeoff_closed_loop,takeoff_settling;
+static float takeoff_height_target,takeoff_climb_speed;
+static uint32_t takeoff_settle_since;
 static float ramp_collective;
 static bool manual_landing;
 extern uint16_t thr_hold;
+extern uint8_t set_high;
 extern int16_t roll_offset,pitch_offset;
 extern uint16_t last_Remote_AUX1;
 #define CE_LOW() (GPIOB->BRR=GPIO_Pin_8)
@@ -45,6 +53,7 @@ static bool height_airborne(void) {return height_fresh()&&hand_link.height_mm>=5
 static void event(unsigned reason) {if(reason&&!hand_link.first_event)hand_link.first_event=reason;}
 static void neutral(void) {Remote.roll=Remote.pitch=Remote.yaw=1500;pidRoll.desired=pidPitch.desired=0;}
 static void locked(unsigned reason) {
+ takeoff_closed_loop=takeoff_settling=false;takeoff_climb_speed=0;
  if(reason) {event(reason);if(!hand_link.last_fault)hand_link.last_fault=reason;}
  hand_link.reason=hand_link.last_fault;
  ALL_flag.unlock=ALL_flag.height_lock=ALL_flag.flow_control=0;
@@ -62,6 +71,7 @@ static uint16_t throttle_from_collective(float c) {
  return (uint16_t)(1000+(c-200)/0.45f+0.5f);
 }
 static void manual(void) {
+ takeoff_closed_loop=takeoff_settling=false;takeoff_climb_speed=0;
  event(HC_HEIGHT);hand_link.reason=HC_HEIGHT;
  ALL_flag.height_lock=ALL_flag.flow_control=0;
  ramp_collective=hand_link.collective;
@@ -71,10 +81,49 @@ static void manual(void) {
  LED.status=AlwaysOn;
 }
 static void assist_start(void) {
+ takeoff_closed_loop=takeoff_settling=false;takeoff_climb_speed=0;
  Remote.thr=1500;neutral();
  ALL_flag.height_lock=1;ALL_flag.flow_control=(hand_link.assist&2)!=0;
  /* HeightPidControl retains the preceding native motor base for HC3 ownership. */
  hand_link.stage=HC_STAGE_HOLD;hand_link.reason=0;
+}
+/* The altitude controller reads this ramp only during automatic ascent.
+ * Keep TAKEOFF visible until measured height actually settles near 1 m. */
+bool hand_link_takeoff_target(float *target) {
+ if(!hand_link.owned || hand_link.stage!=HC_STAGE_TAKEOFF ||
+    !takeoff_closed_loop || !ALL_flag.height_lock)return false;
+ *target=takeoff_height_target;return true;
+}
+static void takeoff_climb_start(void) {
+ assist_start();
+ hand_link.stage=HC_STAGE_TAKEOFF;takeoff_closed_loop=true;
+ takeoff_height_target=pidHeightHigh.measured;
+ if(takeoff_height_target<50)takeoff_height_target=hand_link.height_mm;
+ if(takeoff_height_target>TAKEOFF_TARGET_HEIGHT_MM)takeoff_height_target=TAKEOFF_TARGET_HEIGHT_MM;
+}
+static void takeoff_climb_tick(uint32_t dt) {
+ neutral();Remote.thr=1500;
+ if(!ALL_flag.height_lock) {manual();return;}
+ /* Missing range pauses the trajectory, never increases a blind target. */
+ if(!height_airborne()) {takeoff_climb_speed=0;takeoff_settling=false;return;}
+ float seconds=dt/1000.0f;
+ float remaining=TAKEOFF_TARGET_HEIGHT_MM-takeoff_height_target;
+ /* Slew the setpoint speed, including a gentle approach to the target. */
+ float speed=remaining*2.0f;
+ if(speed>TAKEOFF_CLIMB_MM_S)speed=TAKEOFF_CLIMB_MM_S;
+ if(remaining>0 && speed<10.0f)speed=10.0f;
+ float step=TAKEOFF_CLIMB_ACCEL_MM_S2*seconds;
+ if(takeoff_climb_speed<speed)takeoff_climb_speed=fminf(speed,takeoff_climb_speed+step);
+ else takeoff_climb_speed=fmaxf(speed,takeoff_climb_speed-step);
+ takeoff_height_target=fminf(TAKEOFF_TARGET_HEIGHT_MM,takeoff_height_target+takeoff_climb_speed*seconds);
+ bool arrived=takeoff_height_target==TAKEOFF_TARGET_HEIGHT_MM &&
+     fabsf((float)hand_link.height_mm-TAKEOFF_TARGET_HEIGHT_MM)<=50.0f && fabsf(pidHeightRate.measured)<=100.0f;
+ if(!arrived)takeoff_settling=false;
+ else if(!takeoff_settling) {takeoff_settling=true;takeoff_settle_since=hand_milliseconds;}
+ else if(elapsed(takeoff_settle_since)>=TAKEOFF_SETTLE_MS) {
+  takeoff_closed_loop=takeoff_settling=false;hand_link.stage=HC_STAGE_HOLD;
+  hand_link.reason=0;pidHeightHigh.desired=TAKEOFF_TARGET_HEIGHT_MM;set_high=1;
+ }
 }
 void hand_link_imu(bool ok) {hand_link.imu_ok=ok;if(ok)hand_link.imu_ms=hand_milliseconds;}
 void hand_link_height(bool ok,uint16_t mm) {
@@ -108,6 +157,16 @@ void hand_link_tick(void) {
  if(!isfinite(Angle.roll)||!isfinite(Angle.pitch)) {locked(HC_IMU);return;}
  if(hand_link.stage==HC_STAGE_IDLE) {Remote.thr=1000;neutral();return;}
  if(hand_link.stage==HC_STAGE_TAKEOFF) {
+  if(takeoff_closed_loop) {
+   takeoff_climb_tick(dt);
+   if(hand_link.stage==HC_STAGE_TAKEOFF && elapsed(hand_link.stage_ms)>15000) {
+    event(HC_TAKEOFF_TIMEOUT);
+    if(height_airborne() && ALL_flag.height_lock) {
+     assist_start();set_high=0;hand_link.reason=HC_TAKEOFF_TIMEOUT;
+    }else manual();
+   }
+   return;
+  }
   /* No faster ramp: 500 at 2s, up to 650 only with fresh relative liftoff evidence. */
   neutral();
   bool boost_ready=height_airborne() &&
@@ -123,7 +182,7 @@ void hand_link_tick(void) {
   bool lifted=height_airborne()&&hand_link.height_mm>=hand_link.ground_mm+200;
   if(!lifted)lift_since=0;
   else if(!lift_since)lift_since=hand_milliseconds;
-  else if(elapsed(lift_since)>=100) {assist_start();return;}
+  else if(elapsed(lift_since)>=100) {takeoff_climb_start();return;}
   if(elapsed(hand_link.stage_ms)>15000) {
    /* Missing range evidence must not cut a possibly airborne aircraft. */
    event(HC_TAKEOFF_TIMEOUT);manual();
@@ -247,13 +306,15 @@ bool hand_link_receive(const uint8_t raw[32]) {
    if(height_fresh()) {hand_link.ground_mm=hand_link.height_mm;hand_link.ground_set=1;}
    if(!hand_link.ground_set)hand_link.ground_mm=0;
    hand_link.stage=HC_STAGE_TAKEOFF;hand_link.stage_ms=hand_milliseconds;
+   takeoff_closed_loop=takeoff_settling=false;takeoff_climb_speed=0;
    ramp_collective=TAKEOFF_START_COLLECTIVE;lift_since=0;last_tick=hand_milliseconds;
    for(unsigned i=0;i<4;i++)input[i]=1500;
    Remote.thr=1101;hand_link.reason=0;
   }
  }else if(p.command==HC_LAND) {
+  takeoff_closed_loop=takeoff_settling=false;takeoff_climb_speed=0;
   if(hand_link.stage==HC_STAGE_IDLE)locked(0);
-  else if(hand_link.stage==HC_STAGE_TAKEOFF||hand_link.stage==HC_STAGE_MANUAL) {
+  else if((hand_link.stage==HC_STAGE_TAKEOFF&&!ALL_flag.height_lock)||hand_link.stage==HC_STAGE_MANUAL) {
    manual();manual_landing=true;hand_link.stage=HC_STAGE_LAND;neutral();
   }else {hand_link.stage=HC_STAGE_LAND;neutral();Remote.thr=1100;}
  }else if(p.command==HC_RESUME) {

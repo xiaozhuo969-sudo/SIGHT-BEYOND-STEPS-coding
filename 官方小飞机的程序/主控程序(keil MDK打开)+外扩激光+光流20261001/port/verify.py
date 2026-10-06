@@ -128,12 +128,15 @@ check('restored takeoff hold needs 200mm relative to the captured ground',m.h('s
 for t in range(1902,2004,3):m.tick(t,250)
 check('200mm height still requires the existing 100ms confirmation',m.h('stage')==2)
 m.tick(2004,250)
-check('200mm relative height engages native hold after confirmation',m.h('stage')==3 and m.get('ALL_flag','B')[0]&2 and m.get('Remote','8H')[2]==1500)
+check('200mm relative height engages closed-loop takeoff after confirmation',m.h('stage')==2 and m.get('ALL_flag','B')[0]&2 and m.get('Remote','8H')[2]==1500)
 for t in range(2007,2043,3):m.tick(t,250)
-check('native hold captures measured height instead of channel 1500 or 1600',abs(m.get('pidHeightHigh','f')[0]-250)<1 and m.get('Remote','8H')[2]==1500)
+check('auto target starts near measured height instead of channel 1500 or 1600',abs(m.get('pidHeightHigh','f')[0]-250)<1 and m.get('Remote','8H')[2]==1500)
 m=armed();m.send(3,3)
 for t in range(1602,2400,3):m.tick(t,300)
-check('native height engaged in air',m.h('stage')==3 and m.get('ALL_flag','B')[0]&2)
+check('native height engaged during automatic ascent',m.h('stage')==2 and m.get('ALL_flag','B')[0]&2)
+# Explicit post-arrival fixture for the existing gesture/fallback unit checks.
+# The complete measured 1m arrival sequence is exercised in verify_takeoff_1m.py.
+m.h('stage',3);m.put('takeoff_closed_loop','B',0);m.put('set_high','B',0)
 m.send(0,4,channels=[1300,1500,1500,1500,2000,1000,1000,1000]);m.tick(2400,300)
 check('left gesture crosses native flow threshold',m.get('Remote','8H')[0]==1200)
 m.send(0,5,channels=[1500,1700,1500,1500,2000,1000,1000,1000]);m.tick(2403,300)

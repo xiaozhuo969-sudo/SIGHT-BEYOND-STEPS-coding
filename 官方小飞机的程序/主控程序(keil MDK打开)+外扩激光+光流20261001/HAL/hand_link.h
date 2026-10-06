@@ -20,6 +20,7 @@ void hand_link_poll(void);
 bool hand_link_receive(const uint8_t raw[32]);
 bool hand_link_owned(void);
 void hand_link_tick(void);
+bool hand_link_takeoff_target(float *target);
 void hand_link_imu(bool ok);
 void hand_link_height(bool ok,uint16_t mm);
 void hand_link_motor_observe(void);

@@ -135,10 +135,10 @@ for elapsed in range(0, 100, 3):
     m.tick(t + elapsed, 300)
     check('relative200mm waits for dwell' + str(elapsed), m.h('stage') == 2)
 m.tick(t + 102, 300)
-check('existing100ms dwell enters height/flow mode', m.h('stage') == 3 and m.get('ALL_flag', 'B')[0] == 19)
+check('existing100ms dwell enters closed-loop TAKEOFF', m.h('stage') == 2 and m.get('ALL_flag', 'B')[0] == 19 and m.get('takeoff_closed_loop','B')[0])
 check('native height entry retains boosted650 base', m.get('thr_hold', 'H')[0] == 650)
 advance(m, t + 105, t + 150, 300)
-check('height target captures measured300mm', abs(m.get('pidHeightHigh', 'f')[0] - 300) < 1)
+check('automatic trajectory starts near measured300mm', 295 < m.get('pidHeightHigh', 'f')[0] < 305)
 check('held assist never continues the takeoff ramp', ramp(m) == 650)
 
 # Native/manual control keeps its original default; HC3 retains only bounded bases.
@@ -161,7 +161,7 @@ for owned in (0, 1):
 m = started()
 advance(m, 1603, 2803, 100)
 advance(m, 2803, 2930, 200)
-check('early verified liftoff enters assist without climbing to650', m.h('stage') == 3 and 390 < m.get('thr_hold', 'H')[0] < 430)
+check('early verified liftoff enters closed-loop takeoff without climbing to650', m.h('stage') == 2 and m.get('ALL_flag','B')[0]&2 and 390 < m.get('thr_hold', 'H')[0] < 430)
 
 # Emergency / lease / IMU / landing / no-liftoff safeguards at the new output.
 for reason in ('disarm', 'lease', 'imu'):

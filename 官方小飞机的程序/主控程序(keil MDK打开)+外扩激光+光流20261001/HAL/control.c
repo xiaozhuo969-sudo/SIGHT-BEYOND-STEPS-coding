@@ -117,7 +117,15 @@ void HeightPidControl(float dt)
 		
 		case PROCESS_31://进入定高	
 		
-			 if(Remote.thr<1750 && Remote.thr>1150) //如果油门已回中，不调高度
+            float takeoff_target;
+            if(hand_link_takeoff_target(&takeoff_target)) {
+                set_high=1;
+                pidHeightHigh.desired=takeoff_target;
+                pidUpdate(&pidHeightHigh,dt);
+                /* Bound automatic ascent/descent speed demand, not motor duty. */
+                pidHeightRate.desired=LIMIT(pidHeightHigh.out,-150.0f,250.0f);
+            }
+            else if(Remote.thr<1750 && Remote.thr>1150) //如果油门已回中，不调高度
 			 {
 						if(set_high == 0) //如果刚退出调高，记录当前位置为定高位置
 						{
