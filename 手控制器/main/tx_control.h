@@ -11,6 +11,9 @@ enum { TX_REASON_NONE, TX_REASON_STOP, TX_REASON_HEARTBEAT, TX_REASON_IMU, TX_RE
        TX_REASON_FEEDBACK, TX_REASON_ARM_TIMEOUT, TX_REASON_AIR_LOCK };
 typedef struct {
     unsigned phase, reason, sent;
+    bool estop_active;
+    bool estop_new_session;
+    uint32_t estop_ms;
     hand_feedback_t guard;
     uint32_t since, heartbeat;
     uint16_t aux;
@@ -38,6 +41,9 @@ bool tx_clear_obstacle(tx_control_t *s, uint32_t now);
 void tx_guard_refresh(tx_control_t *s, uint32_t now);
 bool tx_arm(tx_control_t *s, uint32_t now, bool flat_calibrated);
 void tx_stop(tx_control_t *s, uint32_t now, unsigned reason);
+void tx_estop(tx_control_t *s, uint32_t now);
+void tx_estop_refresh_session(tx_control_t *s, uint32_t now, uint32_t session);
+uint32_t tx_estop_remaining(const tx_control_t *s, uint32_t now);
 void tx_fault(tx_control_t *s);
 void tx_sent(tx_control_t *s);
 bool tx_step(tx_control_t *s, uint32_t now, bool pose_valid, bool flat,

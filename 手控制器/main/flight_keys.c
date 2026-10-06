@@ -3,9 +3,9 @@
 void flight_keys_stop(flight_keys_t *k, tx_control_t *tx, uint32_t now)
 {
     k->pending=false; k->launch_requested=false; k->start_armed=false;
-    k->local_owner=false; k->auto_connect=false; k->stop_latched=true; k->reason=KEY_ESTOP;
-    tx_stop(tx,now,TX_REASON_STOP);
-    k->status=tx->phase==TX_STOPPING ? KEY_STOPPING : KEY_STOPPED;
+    k->local_owner=false; k->auto_connect=true; k->stop_latched=true; k->reason=KEY_ESTOP;
+    tx_estop(tx,now);
+    k->status=KEY_STOPPED;
 }
 
 void flight_keys_init(flight_keys_t *k, tx_control_t *tx, bool start_down, bool stop_down, uint32_t now)
@@ -19,7 +19,18 @@ void flight_keys_init(flight_keys_t *k, tx_control_t *tx, bool start_down, bool 
 void flight_keys_autoconnect(flight_keys_t *k, tx_control_t *tx, uint32_t now, uint32_t session,
                            bool radio_ready, bool imu_fresh)
 {
-    if(!k->initialized || !k->auto_connect || k->stop_latched || k->down[1]) return;
+    if(!k->initialized) return;
+    if(tx->estop_active) {
+        if(radio_ready && (tx->phase==TX_OFF || tx->phase==TX_FAULT)) tx_start_v3(tx,now,session);
+        tx_estop_refresh_session(tx,now,session);
+        tx->heartbeat=now;
+        if(k->pending) return;
+        k->local_owner=false;k->status=KEY_STOPPED;
+        k->reason=tx_estop_remaining(tx,now)?KEY_COOLDOWN:k->down[1]?KEY_ESTOP:
+            !radio_ready?KEY_NO_RADIO:!tx_can_arm(tx,now)?KEY_NO_LOCK_REPLY:KEY_OK;
+        return;
+    }
+    if(!k->auto_connect || k->stop_latched || k->down[1]) return;
     k->status=KEY_AUTO_CONNECT;
     k->reason=!radio_ready ? KEY_NO_RADIO : !imu_fresh ? KEY_NO_IMU : KEY_OK;
     if(!radio_ready || !imu_fresh) {
@@ -47,7 +58,8 @@ void flight_keys_edge(flight_keys_t *k, tx_control_t *tx, unsigned key, bool dow
         return;
     }
     if(down) {
-        k->start_armed=k->start_released && !k->down[1] && !k->pending;
+        k->start_armed=k->start_released && !k->down[1] && !k->pending &&
+            (!tx->estop_active || tx_can_arm(tx,now));
     } else {
         if(k->start_armed && !k->down[1]) k->launch_requested=true;
         k->start_armed=false;
@@ -61,6 +73,8 @@ bool flight_keys_begin(flight_keys_t *k, tx_control_t *tx, uint32_t now, uint32_
     if(!k->launch_requested) return false;
     k->launch_requested=false;
     unsigned reason=k->down[1] ? KEY_ESTOP : !radio_ready ? KEY_NO_RADIO :
+                    tx_estop_remaining(tx,now) ? KEY_COOLDOWN :
+                    (tx->estop_active && !tx_can_arm(tx,now)) ? KEY_NO_LOCK_REPLY :
                     !imu_fresh ? KEY_NO_IMU : palm_down ? KEY_PALM :
                     (tx->phase!=TX_OFF && tx->phase!=TX_FAULT && tx->phase!=TX_READY &&
                      tx->phase!=TX_ALT_IDLE) ? KEY_BUSY : KEY_OK;
@@ -87,7 +101,7 @@ static void cancel(flight_keys_t *k, tx_control_t *tx, uint32_t now, unsigned re
 void flight_keys_tick(flight_keys_t *k, tx_control_t *tx, uint32_t now,
                       bool radio_ready, bool imu_fresh, bool flat, bool centering, bool palm_down)
 {
-    if(k->down[1]) { flight_keys_stop(k,tx,now); return; }
+    if(k->down[1]) return; // The press edge already stopped; holding never restarts the timer.
     if(k->status==KEY_STOPPING && (tx->phase==TX_OFF || tx->phase==TX_FAULT)) k->status=KEY_STOPPED;
     if(k->auto_connect) return; // Boot link heartbeat/status comes from autoconnect.
     if(!k->local_owner) return;

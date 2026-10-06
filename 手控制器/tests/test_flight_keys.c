@@ -58,12 +58,12 @@ static void test_auto_connection_never_launches(void)
     flight_keys_autoconnect(&k,&tx,120650,23,true,false);assert(tx.phase==TX_OFF);
     flight_keys_autoconnect(&k,&tx,120700,23,true,true);
     check_packet(&tx,120700,HC_DISARM);
-    // Explicit STOP remains stopped even when the link becomes healthy again.
+    // Explicit STOP keeps lock-only communication, but never resumes flight.
     flight_keys_stop(&k,&tx,120750);
     for(unsigned i=0;i<15;++i)tx_sent(&tx);
-    assert(!tx_step(&tx,121250,true,true,preview,out));
+    assert(tx_step(&tx,121250,true,true,preview,out));
     flight_keys_autoconnect(&k,&tx,122000,24,true,true);
-    assert(tx.phase==TX_OFF&&!k.auto_connect&&!k.pending&&k.stop_latched);
+    assert(tx.phase==TX_READY&&k.auto_connect&&!k.pending&&k.stop_latched&&tx.estop_active);
 }
 
 static void test_auto_connection_launch_and_handoffs(void)
@@ -91,11 +91,11 @@ static void test_auto_connection_launch_and_handoffs(void)
     tx_fault(&tx);
     flight_keys_autoconnect(&k,&tx,900,33,true,true);
     assert(tx.phase==TX_FAULT&&!k.auto_connect); // A flight fault never auto-restarts.
-    // Boot with emergency STOP held must not connect when it is merely released.
+    // Boot-held STOP may communicate only locked; release cannot launch.
     tx=(tx_control_t){0};flight_keys_init(&k,&tx,false,true,0);
     flight_keys_edge(&k,&tx,1,false,100);
     flight_keys_autoconnect(&k,&tx,150,34,true,true);
-    assert(tx.phase==TX_OFF&&!k.auto_connect&&k.stop_latched);
+    assert(tx.phase==TX_READY&&k.auto_connect&&k.stop_latched&&tx.estop_active);
     // Explicit host control returns to the USB heartbeat requirement.
     tx=(tx_control_t){0};flight_keys_init(&k,&tx,false,false,0);
     flight_keys_autoconnect(&k,&tx,100,35,true,true);
@@ -163,16 +163,18 @@ int main(void)
         reply(&tx,1100,HC_STAGE_IDLE,HC_ARM,1); // Delayed ARM echo cannot resume launch.
         flight_keys_tick(&k,&tx,1100,true,false,false,false,false);
         check_packet(&tx,1100,HC_DISARM);
-        uint32_t since=tx.since;
-        flight_keys_stop(&k,&tx,1200);assert(tx.since==since);
+        flight_keys_stop(&k,&tx,1200);assert(tx.estop_ms==1200);
         for(unsigned n=0;n<15;++n)tx_sent(&tx);
-        assert(!tx_step(&tx,1600,true,true,preview,out) && tx.phase==TX_OFF);
+        assert(tx_step(&tx,1600,true,true,preview,out) && tx.phase==TX_READY);
         flight_keys_tick(&k,&tx,1600,true,true,true,false,false);
         assert(k.status==KEY_STOPPED);
     }
     tx=(tx_control_t){0};flight_keys_init(&k,&tx,false,true,0);
     click(&k,&tx,50);flight_keys_edge(&k,&tx,1,false,150);
     assert(!k.launch_requested && tx.phase==TX_OFF);
+    click(&k,&tx,200);assert(!flight_keys_begin(&k,&tx,250,12,true,true,false));
+    /* A fresh explicit launch after cooldown is covered by test_estop_cooldown. */
+    tx=(tx_control_t){0};flight_keys_init(&k,&tx,false,false,0);
     click(&k,&tx,200);assert(flight_keys_begin(&k,&tx,250,12,true,true,false));
     assert(!k.stop_latched);
     flight_keys_tick(&k,&tx,6251,true,true,true,false,false);

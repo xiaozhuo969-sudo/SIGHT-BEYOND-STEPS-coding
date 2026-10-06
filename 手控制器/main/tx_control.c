@@ -23,14 +23,18 @@ static void phase(tx_control_t *s, unsigned next, uint32_t now)
 bool tx_start_v3(tx_control_t *s, uint32_t now, uint32_t session)
 {
     if (s->phase != TX_OFF && s->phase != TX_FAULT) return false;
+    const bool estop=s->estop_active;const uint32_t stopped=s->estop_ms;
     *s = (tx_control_t){.phase=TX_READY,.since=now,.heartbeat=now,.v2=true,.v3=true,
         .session=session?session:1,.air_height_mm=UINT16_MAX,.air_relative_mm=INT16_MIN,
         .air_pitch_cdeg=INT16_MIN,.air_roll_cdeg=INT16_MIN,.air_distance_cm=UINT16_MAX};
+    s->estop_active=estop;s->estop_ms=stopped;
+    if(estop) s->reason=TX_REASON_STOP;
     return true;
 }
 bool tx_arm(tx_control_t *s, uint32_t now, bool flat_calibrated)
 {
     if (!tx_can_arm(s, now) || !flat_calibrated) return false;
+    s->estop_active=false;s->reason=TX_REASON_NONE;
     phase(s, TX_ARM_REQUEST, now);
     return true;
 }
@@ -39,6 +43,28 @@ void tx_stop(tx_control_t *s, uint32_t now, unsigned reason)
     if (s->phase == TX_OFF || s->phase == TX_FAULT || s->phase == TX_STOPPING) return;
     s->reason = reason;
     phase(s, TX_STOPPING, now);
+}
+uint32_t tx_estop_remaining(const tx_control_t *s, uint32_t now)
+{
+    uint32_t elapsed=now-s->estop_ms;
+    return s->estop_active && elapsed<10000 ? 10000-elapsed : 0;
+}
+void tx_estop(tx_control_t *s, uint32_t now)
+{
+    s->estop_active=true;s->estop_new_session=true;s->estop_ms=now;s->reason=TX_REASON_STOP;
+    /* Keep an established session and sequence; radio recovery may start a new one. */
+    if(s->phase!=TX_OFF && s->phase!=TX_FAULT) phase(s,TX_READY,now);
+    s->feedback=false;s->guard=(hand_feedback_t){0};
+}
+void tx_estop_refresh_session(tx_control_t *s, uint32_t now, uint32_t session)
+{
+    /* First DISARM the current flight session. Only a fresh locked reply permits
+     * a new session to clear the aircraft's per-session fault latch. */
+    if(!s->estop_active || !s->estop_new_session || s->phase!=TX_READY || !s->feedback ||
+       (uint32_t)(now-s->feedback_ms)>=300 || (s->air_flags&1) || s->air_command!=HC_DISARM) return;
+    if(!session || session==s->session) {session=s->session+1;if(!session)session=1;}
+    s->phase=TX_OFF;
+    tx_start_v3(s,now,session); // Preserves emergency cooldown, clears feedback only.
 }
 void tx_fault(tx_control_t *s)
 {
@@ -61,6 +87,15 @@ bool tx_step(tx_control_t *s, uint32_t now, bool pose_valid, bool flat,
              const uint16_t preview[8], uint16_t channels[8])
 {
     if (s->phase == TX_OFF || s->phase == TX_FAULT) return false;
+    /* Emergency lock communication does not depend on hand pose or USB heartbeat.
+     * This branch can only encode DISARM, and never clears the re-arm gate. */
+    if(s->estop_active) {
+        if(s->phase!=TX_READY) phase(s,TX_READY,now);
+        link_health(s,now);
+        channels[0]=channels[1]=channels[3]=1500;channels[2]=1000;channels[4]=2000;
+        channels[5]=channels[6]=channels[7]=1000;
+        return true;
+    }
     if ((uint32_t)(now - s->heartbeat) > 750) tx_stop(s, now, TX_REASON_HEARTBEAT);
     if (!pose_valid) tx_stop(s, now, TX_REASON_IMU);
     if (s->v2) {
@@ -134,7 +169,7 @@ bool tx_resume(tx_control_t *s, uint32_t now, bool flat_calibrated)
 }
 bool tx_can_arm(const tx_control_t *s, uint32_t now)
 {
-    return s->v3 && s->phase==TX_READY && s->feedback && !s->link_warning &&
+    return !tx_estop_remaining(s,now) && s->v3 && s->phase==TX_READY && s->feedback && !s->link_warning &&
         (uint32_t)(now-s->feedback_ms)<300 && (uint32_t)(now-s->since)>=500 &&
         !(s->air_flags&1) && s->air_command==HC_DISARM;
 }

@@ -6,7 +6,7 @@
 enum { KEY_IDLE, KEY_CONNECTING, KEY_ARMING, KEY_TAKEOFF, KEY_ACTIVE,
        KEY_STOPPING, KEY_STOPPED, KEY_REJECTED, KEY_AUTO_CONNECT, KEY_LINK_READY };
 enum { KEY_OK, KEY_NO_RADIO, KEY_NO_IMU, KEY_PALM, KEY_BUSY, KEY_NOT_CENTERED,
-       KEY_TIMEOUT, KEY_ESTOP };
+       KEY_TIMEOUT, KEY_ESTOP, KEY_COOLDOWN, KEY_NO_LOCK_REPLY };
 typedef struct {
     bool initialized, down[2], start_released, start_armed, launch_requested;
     bool pending, local_owner, stop_latched, auto_connect;
@@ -16,7 +16,7 @@ typedef struct {
 
 void flight_keys_init(flight_keys_t *k, tx_control_t *tx, bool start_down, bool stop_down, uint32_t now);
 void flight_keys_edge(flight_keys_t *k, tx_control_t *tx, unsigned key, bool down, uint32_t now);
-/* Boot connection sends DISARM only. Explicit STOP or launch leaves this mode. */
+/* Boot and post-estop communication send DISARM only; launch is always explicit. */
 void flight_keys_autoconnect(flight_keys_t *k, tx_control_t *tx, uint32_t now, uint32_t session,
                            bool radio_ready, bool imu_fresh);
 bool flight_keys_begin(flight_keys_t *k, tx_control_t *tx, uint32_t now, uint32_t session,

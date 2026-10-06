@@ -81,7 +81,6 @@ bool telemetry_tx_frame(uint8_t packet[32])
                        isfinite(s_state.pitch) && isfinite(s_state.roll);
     if(flight_stop_pressed()) {
         flight_keys_edge(&s_keys,&s_tx,1,true,(uint32_t)(now/1000));
-        flight_keys_stop(&s_keys,&s_tx,(uint32_t)(now/1000));
     }
     const bool active = tx_step(&s_tx, (uint32_t)(now / 1000), fresh,
                                s_signal == GESTURE_FLAT, s_preview, channels);
@@ -414,6 +413,7 @@ static void telemetry_task(void *arg)
                "\"button\":%u,\"presses\":%u,\"leds\":%u,\"pattern\":%u,"
                "\"key_start\":%u,\"key_stop\":%u,\"key_start_count\":%u,\"key_stop_count\":%u,"
                "\"key_status\":%u,\"key_reason\":%u,\"key_local\":%u,\"key_pending\":%u,\"key_stop_latched\":%u,\"key_auto\":%u,"
+               "\"estop_active\":%u,\"estop_remaining_ms\":%lu,"
                "\"motor0\":%u,\"motor1\":%u,"
                "\"gesture\":%u,\"fist\":%u,\"gpitch\":%.1f,\"groll\":%.1f,"
                "\"gvalid\":%u,\"gcal\":%u,\"ginvp\":%u,\"ginvr\":%u,\"gswap\":%u,\"gphase\":%u,\"gconfirm\":%u,"
@@ -446,6 +446,7 @@ static void telemetry_task(void *arg)
                state.button, state.presses, state.leds,
                state.pattern, keys.down[0],keys.down[1],keys.presses[0],keys.presses[1],
                keys.status,keys.reason,keys.local_owner,keys.pending,keys.stop_latched,keys.auto_connect,
+               tx.estop_active,(unsigned long)tx_estop_remaining(&tx,(uint32_t)(now/1000)),
                state.motor[0], state.motor[1],
                gesture.signal, state.button, gesture.pitch, gesture.roll,
                gesture.valid, settings.calibrated, settings.invert_pitch,
@@ -499,7 +500,8 @@ static void command_task(void *arg)
             const bool hard_stop=flight_stop_pressed();
             portENTER_CRITICAL(&s_mux);
             if(hard_stop) flight_keys_edge(&s_keys,&s_tx,1,true,now);
-            const bool motion_allowed=s_led_test_pin<0 && !s_keys.down[1] && !s_keys.stop_latched && !s_keys.pending;
+            const bool motion_allowed=s_led_test_pin<0 && !s_keys.down[1] && !s_keys.pending &&
+                (!s_keys.stop_latched || (s_tx.estop_active && tx_can_arm(&s_tx,now)));
             if (!strcmp(line, "@T,PING")) {
                 s_tx.heartbeat = now; accepted = true;
             } else if (!strcmp(line, "@T,START3")) {

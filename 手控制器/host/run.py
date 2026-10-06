@@ -166,6 +166,7 @@ class SerialLink:
                                     "spo2", "spo2_valid", "finger", "max_ready", "ppg_ok", "red", "ir", "ppg_samples", "ppg_age_ms", "spo2_age_ms", "samples", "spo2_stream",
                                     "spo2_held", "ppg_correlation", "ppg_quality", "ppg_contact_resets",
                                     "key_start", "key_stop", "key_start_count", "key_stop_count", "key_status", "key_reason", "key_local", "key_pending", "key_stop_latched", "key_auto",
+                                    "estop_active", "estop_remaining_ms",
                                     "air_first_event", "air_diag_age_ms", "air_telem_received", "air_attitude_valid",
                                     "air_pitch_cdeg", "air_roll_cdeg", "air_distance_valid", "air_distance_cm",
                                     "air_telem_age_ms", "air_telem_frames", "air_telem_gap_ms", "air_telem_max_gap_ms")
@@ -502,10 +503,11 @@ class App(tk.Tk):
     def tx_action(self, action):
         if action == "STOP":
             return self.emergency_stop()
-        if self.estop is not None:
-            if action in ("ARM", "TAKEOFF", "LAND", "RESUME") or (action in ("START3",) and not self.estop["stopped"]):
-                return
         frame = self.last_frame or {}
+        if self.estop is not None:
+            if (action in ("ARM", "TAKEOFF", "LAND", "RESUME") and
+                    not (action == "ARM" and self._estop_rearm_ready(frame))) or (action == "START3" and not self.estop["stopped"]):
+                return
         if action == "START3" and not ("tx_v3" in frame and frame.get("tx_phase") in (0, 10) and
                                         frame.get("rc_ready") and self._frame_fresh()):
             return
@@ -514,6 +516,8 @@ class App(tk.Tk):
                 return
         try:
             self.link.send_tx(action)
+            if action == "ARM" and self._estop_rearm_ready(frame):
+                self.estop = None
             if action in ("START3",):
                 self.estop = None
                 self.estop_status.config(text="急停：锁定飞机并停止控制 · Esc（本窗口内）", fg=MUTED)
@@ -541,6 +545,22 @@ class App(tk.Tk):
         return "break"
 
     def _render_estop(self, frame):
+        if frame and frame.get("estop_active"):
+            if self.estop is not None:
+                self.estop["cooldown_seen"]=True
+            remaining=max(0,int(frame.get("estop_remaining_ms",10000)))
+            locked=self._air_fresh(frame) and frame.get("air_cmd")==2 and not (int(frame.get("air_flags",0))&1)
+            state="飞机已确认锁定" if locked else "等待飞机锁定回传"
+            detail=(f"冷却 {(remaining+999)//1000} 秒" if remaining else
+                    "请松开急停键" if frame.get("key_stop") else
+                    "可重新按起飞键" if self._estop_rearm_ready(frame) else "等待通信/锁定确认")
+            self.estop_status.config(text=f"急停 · {state} · {detail} · 保持锁定通信",fg=PINK if remaining or not locked else ACCENT)
+            return
+        if (frame and "estop_active" in frame and self.estop is not None and
+                self.estop.get("cooldown_seen") and frame.get("tx_phase") in (11,12,13,14,15,16,17,18)):
+            self.estop=None
+            self.estop_status.config(text="急停 · Esc：锁定飞机，保持通信并冷却 10 秒",fg=MUTED)
+            return
         stop = self.estop
         if stop is None:
             return
@@ -657,6 +677,9 @@ class App(tk.Tk):
                 stages[phase] = "等待无线与姿态就绪，随后自动连接（保持锁定）"
         if radio_unavailable and configuring:
             stages[phase] = "无法连接 · 手控无线模块自检未通过"
+        if frame.get("estop_active"):
+            seconds=(max(0,int(frame.get("estop_remaining_ms",10000)))+999)//1000
+            stages[phase]=f"急停锁定通信 · 冷却 {seconds} 秒" if seconds else "急停后保持锁定 · 等待新的起飞操作"
         calibration = imu_calibration_text(frame)
         if calibration and phase == 0:
             stages[phase] = calibration + " · 请平放静止，等待 100%"
@@ -700,8 +723,14 @@ class App(tk.Tk):
         elapsed_ms = max(0, time.monotonic() - self.last_frame_at) * 1000
         return bool(frame.get("air_valid") and isinstance(age, int) and 0 <= age and age + elapsed_ms < 600)
 
+    def _estop_rearm_ready(self, frame):
+        return bool(frame.get("estop_active") and frame.get("estop_remaining_ms",10000)==0 and
+                    frame.get("tx_can_arm") and not frame.get("key_stop") and
+                    self._frame_fresh() and self._air_fresh(frame))
+
     def _hc3_action_allowed(self, frame, action):
-        if (self.estop is not None or frame.get("key_stop") or frame.get("key_stop_latched") or
+        blocked=(self.estop is not None or frame.get("key_stop_latched") or frame.get("estop_active"))
+        if ((blocked and not (action=="ARM" and self._estop_rearm_ready(frame))) or frame.get("key_stop") or
             frame.get("key_pending") or not frame.get("tx_v3") or not self._frame_fresh() or not self._air_fresh(frame)):
             return False
         phase = frame.get("tx_phase")
@@ -1147,8 +1176,12 @@ class App(tk.Tk):
                       5: "急停：正在发送锁定", 6: "急停流程已结束 · 锁定状态见飞机回传", 7: "操作未完成",
                       8: "自动连接中 · 保持锁定，等待飞机回传", 9: "已连接并锁定 · 平放后按 LED1 起飞"}
         key_reasons = {1: "NRF24 未就绪", 2: "IMU 无新数据", 3: "请松开手掌按钮", 4: "当前状态不接受重复起飞",
-                       5: "手未保持平放", 6: "连接/解锁超时，请重新按键", 7: "急停已触发"}
+                       5: "手未保持平放", 6: "连接/解锁超时，请重新按键", 7: "急停已触发",
+                       8: "急停冷却中", 9: "等待新鲜锁定回传"}
         key_text = key_states.get(frame.get("key_status", 0), "等待按键状态")
+        if frame.get("estop_active"):
+            seconds=(max(0,int(frame.get("estop_remaining_ms",10000)))+999)//1000
+            key_text=f"急停后保持通信 · 冷却 {seconds} 秒" if seconds else "急停后保持锁定 · 需重新按起飞键"
         if frame.get("key_reason", 0) in key_reasons:
             key_text += " · " + key_reasons[frame["key_reason"]]
         self.flight_key_status.config(text=key_text if keys_supported else "等待实体按键状态",

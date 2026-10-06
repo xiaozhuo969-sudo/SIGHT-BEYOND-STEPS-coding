@@ -252,6 +252,23 @@ class HostTests(unittest.TestCase):
         self.assertEqual(self.app.link.commands, [("TX", "STOP"), ("TX", "START3")])
         self.assertIsNone(self.app.estop)
 
+    def test_estop_cooldown_keeps_link_and_requires_explicit_arm(self):
+        self.begin_estop(tx_phase=1, air_flags=0, air_cmd=2)
+        self.app.link.commands.clear()
+        f=self.estop_frame(tx_phase=1,air_flags=0,air_cmd=2,estop_active=1,
+            estop_remaining_ms=10000,key_stop_latched=1,key_stop=0,tx_can_arm=1)
+        self.app._render(f)
+        for action in ('ARM','TAKEOFF','RESUME','START3'):
+            self.app.tx_action(action)
+        self.assertFalse(self.app.link.commands)
+        self.assertIn('10 秒',self.app.estop_status['text'])
+        self.app._render(dict(f,estop_remaining_ms=0,key_stop=1))
+        self.app.tx_action('ARM');self.assertFalse(self.app.link.commands)
+        self.app._render(dict(f,estop_remaining_ms=0,key_stop=0))
+        self.assertFalse(self.app.link.commands) # Countdown expiry never sends ARM.
+        self.assertIn('可重新按起飞键',self.app.estop_status['text'])
+        self.app.tx_action('ARM');self.assertEqual(self.app.link.commands,[('TX','ARM')])
+
     def test_estop_requires_new_disarm_reply(self):
         reply = self.estop_frame(ms=1200, tx_phase=9, tx_reason=1, air_cmd=2,
                                 air_flags=0, air_frames=21, air_age_ms=30)
