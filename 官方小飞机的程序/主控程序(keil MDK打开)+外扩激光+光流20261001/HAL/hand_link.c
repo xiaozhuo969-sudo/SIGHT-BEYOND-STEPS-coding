@@ -15,6 +15,12 @@ static bool radio_tx;
 static uint32_t reply_at,tx_at,radio_check_at,last_tick,lift_since,tx_started_us;
 static uint32_t telemetry_at;
 static uint16_t input[8]={1500,1500,1500,1500,2000,1000,1000,1000};
+/* Preserve the original ramp slope; only verified liftoff unlocks extra headroom. */
+#define TAKEOFF_START_COLLECTIVE 245.5f
+#define TAKEOFF_GROUND_CAP 500.0f
+#define TAKEOFF_AIR_CAP 650.0f
+#define TAKEOFF_BASE_RAMP_MS 2000.0f
+#define TAKEOFF_BOOST_LIFT_MM 50U
 static float ramp_collective;
 static bool manual_landing;
 extern uint16_t thr_hold;
@@ -67,7 +73,7 @@ static void manual(void) {
 static void assist_start(void) {
  Remote.thr=1500;neutral();
  ALL_flag.height_lock=1;ALL_flag.flow_control=(hand_link.assist&2)!=0;
- /* The original HeightPidControl initializes its own PID state and base=500. */
+ /* HeightPidControl retains the preceding native motor base for HC3 ownership. */
  hand_link.stage=HC_STAGE_HOLD;hand_link.reason=0;
 }
 void hand_link_imu(bool ok) {hand_link.imu_ok=ok;if(ok)hand_link.imu_ms=hand_milliseconds;}
@@ -102,9 +108,16 @@ void hand_link_tick(void) {
  if(!isfinite(Angle.roll)||!isfinite(Angle.pitch)) {locked(HC_IMU);return;}
  if(hand_link.stage==HC_STAGE_IDLE) {Remote.thr=1000;neutral();return;}
  if(hand_link.stage==HC_STAGE_TAKEOFF) {
-  /* Ramp from the native motor-start threshold to the cap in 2000 ms. */
-  neutral();ramp_collective+=(500.0f-245.5f)*dt/2000.0f;
-  if(ramp_collective>500)ramp_collective=500;
+  /* No faster ramp: 500 at 2s, up to 650 only with fresh relative liftoff evidence. */
+  neutral();
+  bool boost_ready=height_airborne() &&
+      hand_link.height_mm>=hand_link.ground_mm+TAKEOFF_BOOST_LIFT_MM;
+  if(ramp_collective<TAKEOFF_GROUND_CAP || boost_ready) {
+   float cap=boost_ready?TAKEOFF_AIR_CAP:TAKEOFF_GROUND_CAP;
+   ramp_collective+=(TAKEOFF_GROUND_CAP-TAKEOFF_START_COLLECTIVE)*dt/TAKEOFF_BASE_RAMP_MS;
+   if(ramp_collective>cap)ramp_collective=cap;
+  }
+  /* When range is invalid/stale, freeze an existing boost; never step down to 500. */
   Remote.thr=throttle_from_collective(ramp_collective);
   /* A ground reading of zero never blocks TAKEOFF or the motor ramp. */
   bool lifted=height_airborne()&&hand_link.height_mm>=hand_link.ground_mm+200;
@@ -235,7 +248,7 @@ bool hand_link_receive(const uint8_t raw[32]) {
    if(height_fresh()) {hand_link.ground_mm=hand_link.height_mm;hand_link.ground_set=1;}
    if(!hand_link.ground_set)hand_link.ground_mm=0;
    hand_link.stage=HC_STAGE_TAKEOFF;hand_link.stage_ms=hand_milliseconds;
-   ramp_collective=245.5f;lift_since=0;last_tick=hand_milliseconds;
+   ramp_collective=TAKEOFF_START_COLLECTIVE;lift_since=0;last_tick=hand_milliseconds;
    for(unsigned i=0;i<4;i++)input[i]=1500;
    Remote.thr=1101;hand_link.reason=0;
   }

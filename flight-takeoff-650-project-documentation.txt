@@ -1,0 +1,23 @@
+飞控起飞650上限与定高基础输出衔接
+需求：用户确认起飞基础控制量由500提高30%到650，要求修改代码、编译验证、可回退；本轮不烧录，待用户接线。
+依据：已记录1354帧及用户重复飞不高反馈，测高最高137mm，起飞基础输出500封顶，未进入定高/光流阶段；GPIO9正常识别、中立指令正常。后续重复试飞仅有用户反馈，不伪称多份日志。
+实现边界：仅飞控HAL/hand_link.c起飞渐升、HAL/control.c中HeightPidControl进入状态基础输出初始化；新增port/verify_takeoff_650.py及本TXT。未修改手控、无线协议、GPIO/测距解析、PID增益/算法、原电机混控。
+目标：STM32F103 medium density，前次实际Flash容量寄存器128KB；J-Link烧录须匹配128KB配置STM32F103CB，不能用64KB C8配置。当前固件按128KB链接。
+起飞：原始起步245.5，原斜率(500-245.5)/2000=0.12725控制单位/ms（127.25/s）保留。无抬升证据仍最多500；绝对测高>=50mm且<3500mm、相对地面>=50mm、读取成功且样本年龄<=100ms才允许额外渐升到650。650是控制量/原输入映射上限，不是实际升力增加30%的保证。
+测高失效：未超过500时仍执行原起飞策略；已经提升后若零值/低于离地条件/无效/过期，只暂停追加，保持当前基础量，不突然退回500。恢复有效后按当前步进继续，没有补偿积累时间的跳变；调度间隔>100ms时沿用原dt=0处理。
+阶段切换：相对地面>=200mm且原100ms确认满足后即进入原定高/光流模式，不必加满650。原15秒起飞无离地证据时转手动降级规则保留。
+定高衔接：HC3所有权下沿用MotorControl在起飞/手动阶段记录的thr_hold，只接收205..650范围；无所有权或基准异常时仍使用原默认500。保持原PID及当前测量高度捕获逻辑，不把1500通道值当目标高度，不把所有手动路径一起改变。
+GPIO9：沿用原定高中立保持，本轮不新增起飞阶段按键立即切换定高的功能；先验证正常起飞跨过20cm并进入保持，再持续按键观察。
+保护：原解锁条件、IMU有效/100ms检查、600ms命令失联锁定、急停立即清PWM、手动/降落速度及混控/最终PWM限幅保留。没有提高PID限幅或改电机额定参数。
+环境：Windows PowerShell，C99，GNU Arm Embedded13.2.Rel1（GCC13.2.1，Cortex-M3/Thumb/soft-float），原STM32标准外设库，Python D:/Espressif/test-python/Scripts/python.exe，Unicorn执行实际Thumb ELF，pyelftools读取符号。
+构建：PATH前置 D:/Espressif/arm/arm-gnu-toolchain-13.2.Rel1-mingw-w64-i686-arm-none-eabi/bin；python -X utf8 飞控port/build.py。输出Output/gcc/official_hand.elf/.hex/.template.bin/.map，text36300/data744/bss2228。既有libnosys_close/_lseek/_read/_write未实现链接警告仍在，未宣称零警告。
+验证：python -X utf8 port/verify.py（228项，含原官方AXF差分电机混控和PID算术、协议、看门狗、灯光、测距）；verify_flow_recovery.py（553项）；verify_takeoff_650.py（134项）。总计915项通过，全部不访问硬件。
+新增验证：原地500封顶、相对49/50mm阈值、原斜率约3.18秒达到650、硬上限、100/101ms新鲜度、零值/3500/读取失败冻结及恢复、调度卡顿不跳变、相对199/200mm+100ms切换、捕获当前高度、HC3基准205..650与原手动500保持、PID增益不变、提前进入保持、650下急停/命令失联/IMU失效、原25单位/s降落、15秒手动降级、32位时钟回绕。
+测试排程：使用真实编译固件在模拟RAM/寄存器执行，3ms控制、独立6ms高度任务，支持任意绝对时钟相位；不发送串口或SWD命令，不驱动实物电机。
+审核：字节级核对仅两份已编译C源码变化，保持原GBK注释/换行；编译源码哈希一致；程序加载段不覆盖0x08007C00..0x08007FFF校准页；模板该页为FF。用户原project-documentation.txt及手控.vscode字节未改。
+版本：修改前标签backup/flight-takeoff-650-before-20261007；新提交和发布标签见 D:/Espressif/releases/flight-takeoff-650-20261007/manifest.json。
+备份：D:/Espressif/backups/takeoff-650-20261007/repository.bundle、flight-before.zip（含旧Output构建产物）、before-manifest.json、preexisting-user-files.zip。原飞控已烧录版本f38ec1c；本轮新固件尚未烧录。
+回退代码：git revert本次提交；备份bundle可恢复历史，flight-before.zip可恢复旧源及固件。单独恢复源码不会自动回退设备。
+待烧录：用户接好飞控SWD且停桨锁定后，先读128KB整片并验证旧版本，备份当前板实际校准；将模板0x7C00..0x7FFF替换为当前校准页，按STM32F103CB128KB配置烧录，完整回读一致后才复位运行。不能直接loadbin模板而丢失校准。
+未验证：尚未实物烧录、测电池负载电压/电流或温升、真机650升力及定点定高效果。915项离线通过不能等同于实飞保证。
+首轮真机观察：满电、测高有效，记录基础输出/高度/阶段；应进入stage3、height_lock/flow_control有效，切换基础量不回落500；进入保持后GPIO9持续3–5秒，观察高度/漂移。光流质量/位置不在现手控回传中，必要时落地补读。所有起飞由用户操作，助手不发启动电机指令。

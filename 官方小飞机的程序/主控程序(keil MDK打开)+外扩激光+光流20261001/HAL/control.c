@@ -13,6 +13,7 @@
 #include "control.h"
 #include "pid.h"
 #include "flow.h"
+#include "hand_link.h"
 #include "kalman.h"
 //------------------------------------------------------------------------------
 #undef NULL
@@ -106,7 +107,10 @@ void HeightPidControl(float dt)
 				set_high=0;
 
 				LED.status = WARNING;
-			thr_hold=500;
+            /* HC3 takeoff/manual already tracks the actual native motor base.
+             * Keep it through assist entry; retain the legacy default otherwise. */
+            if(!hand_link_owned() || thr_hold<205 || thr_hold>650)
+                thr_hold=500;
 			status = PROCESS_31;
 			}
 			break;
