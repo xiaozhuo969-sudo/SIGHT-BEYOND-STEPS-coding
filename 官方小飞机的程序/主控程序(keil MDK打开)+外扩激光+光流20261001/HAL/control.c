@@ -184,108 +184,108 @@ void HeightPidControl(float dt)
  ***************************************************************/
 
 
+/* A gesture and a position hold must not share motion-induced integral.
+ * Keep the last hold trim (load/CG compensation), discard only the integral
+ * acquired during translation, and seed D on command edges. */
+#define FLOW_I_MAX_DEG 3.0f
+#define FLOW_ANGLE_MAX_DEG 15.0f
+typedef struct {
+    float command, hold_integral;
+    uint8_t captured;
+} FlowAxisState;
+static FlowAxisState flow_axis[2];
 volatile uint8_t flow_control_status=WAITING_1;
 volatile uint16_t flow_target_captures;
+
+static void flow_control_reset(void)
+{
+    pidRest(&pPidObject[8],4);
+    for(unsigned i=0;i<2;i++) {
+        flow_axis[i].command=0;
+        flow_axis[i].hold_integral=0;
+        flow_axis[i].captured=0;
+    }
+}
+
+static void flow_rate_update(PidObject *pid,float dt)
+{
+    float error=pid->desired-pid->measured+pid->offset;
+    float bound=pid->ki>0 ? FLOW_I_MAX_DEG/pid->ki : 0;
+    float old=LIMIT(pid->integ,-bound,bound);
+    float integ=LIMIT(old+error*dt,-bound,bound);
+    float pd=pid->kp*error+pid->kd*(error-pid->prevError)/dt;
+    float out=pd+pid->ki*integ;
+    /* Do not wind up farther into the existing attitude output limit. */
+    if((out>FLOW_ANGLE_MAX_DEG && error>0) ||
+       (out< -FLOW_ANGLE_MAX_DEG && error<0))integ=old;
+    pid->integ=integ;
+    pid->prevError=error;
+    pid->out=pd+pid->ki*integ;
+}
+
+static uint8_t flow_axis_update(FlowAxisState *state,PidObject *position,
+    PidObject *rate,float command,float measured_position,float velocity,float dt)
+{
+    uint8_t capture=0,changed=command!=state->command;
+    if(changed && command!=0 && state->command==0)
+        state->hold_integral=rate->integ;
+    if(command!=0) {
+        state->captured=0;
+        rate->desired=command;
+    } else {
+        if(!state->captured) {
+            position->desired=measured_position;
+            position->integ=position->prevError=0;
+            state->captured=1;
+            capture=1;
+        }
+        if(changed)rate->integ=state->hold_integral;
+        position->measured=measured_position;
+        pidUpdate(position,dt);
+        rate->desired=LIMIT(position->out,-20,20);
+    }
+    rate->measured=velocity;
+    /* Suppress setpoint derivative kick, not measured-velocity damping. */
+    if(changed)rate->prevError=rate->desired-rate->measured+rate->offset;
+    flow_rate_update(rate,dt);
+    state->command=command;
+    return capture;
+}
+
 void FlowPidControl(float dt)
 {
-	/* State exported for read-only diagnostics. */
-	static uint8_t set_pos = 0;
-
-	//----------------------------------------------紧急终止飞行
-	if(ALL_flag.unlock == EMERGENT) //意外情况，请使用遥控紧急上锁，飞控就可以在任何情况下紧急中止飞行，锁定飞行器，退出PID控制
-		flow_control_status = EXIT_255;
-	//----------------------------------------------控制
-    /* An invalid estimate is not a measured position of zero. Forget the
-     * old target/PID history and recapture the recovered coordinate frame. */
-    if (ALL_flag.unlock && (!ALL_flag.flow_control || !ALL_flag.height_lock ||
-                            !flow_position_ready())) {
-        pidRest(&pPidObject[8],4);
-        set_pos = 1;
-        flow_control_status = WAITING_2;
-        if (ALL_flag.flow_control) {
-            pidRoll.desired = 0;
-            pidPitch.desired = 0;
+    if(!ALL_flag.unlock) {
+        flow_control_reset();
+        flow_control_status=WAITING_1;
+        return;
+    }
+    if(!ALL_flag.flow_control || !ALL_flag.height_lock || !flow_position_ready()) {
+        flow_control_reset();
+        flow_control_status=WAITING_2;
+        if(ALL_flag.flow_control)pidRoll.desired=pidPitch.desired=0;
+        return;
+    }
+    if(flow_control_status==WAITING_1) {
+        flow_control_status=WAITING_2;
+        return;
+    }
+    if(flow_control_status!=PROCESS_31) {
+        if(VL53L01_high>200) {
+            flow_control_reset();
+            flow_control_status=PROCESS_31;
         }
         return;
     }
-	switch(flow_control_status)
-	{
-		case WAITING_1:		
-			if(ALL_flag.unlock) //检测解锁
-			{
-					flow_control_status = WAITING_2;	
-			}
-			break;
-		case WAITING_2: //当油门大于1300  即默认为起飞后进入定点控制
-			if(ALL_flag.flow_control&&VL53L01_high>200) 
-			{
-				pidRest(&pPidObject[8],4);  //复位上次遗留下来的PID数据
-				flow_control_status = PROCESS_31;
-				set_pos = 1;
-			}			
-			break;
-		case PROCESS_31://进入
-			{
-				
-				if(Remote.roll>1750||Remote.roll<1250||Remote.pitch>1750||Remote.pitch<1250)
-				{
-						set_pos = 1;
-						if(Remote.roll>1750)
-							pidPosRateX.desired = -15;   //直接控制速度 并且关掉外环计算
-						else if(Remote.roll<1250)
-							pidPosRateX.desired = 15; 
-						if(Remote.pitch>1750)
-							pidPosRateY.desired = 15;   //直接控制速度 并且关掉外环计算
-						else if(Remote.pitch<1250)
-							pidPosRateY.desired = -15; 
-				}
-				else
-				{	
-					
-					if(set_pos == 1)   //记录位置 一次
-					{
-						set_pos = 0; 		//关闭记录位置标志
-
-						++flow_target_captures;
-						pidPositionX.desired = flow_x_lpf_att_i;
-						pidPositionY.desired = flow_y_lpf_att_i;	
-					}
-					
-					//外环位置控制
-					pidPositionX.measured = flow_x_lpf_att_i;//实时位置反馈
-					pidUpdate(&pidPositionX,dt);//位置运算PID
-					pidPositionY.measured = flow_y_lpf_att_i;//实时位置反馈
-					pidUpdate(&pidPositionY,dt);//位置运算PID
-					//内环期望
-					pidPosRateX.desired = LIMIT(pidPositionX.out,-20,20);//位置PID输出给速度期望
-					pidPosRateY.desired = LIMIT(pidPositionY.out,-20,20);//位置PID输出给速度期望
-				}
-				
-								//内环
-				pidPosRateX.measured = flow_x_vel_lpf_i;//速度反馈
-				pidUpdate(&pidPosRateX,dt);//速度运算
-				pidPosRateY.measured = flow_y_vel_lpf_i;//速度反馈
-				pidUpdate(&pidPosRateY,dt);//速度运算
-				
-				
-				pidRoll.desired = LIMIT(pidPosRateX.out,-15,15)  ; //姿态外环期望值
-				pidPitch.desired = -LIMIT(pidPosRateY.out,-15,15); //姿态外环期望值		
-
-				if(!ALL_flag.flow_control||!ALL_flag.height_lock)
-				{
-			
-					flow_control_status = EXIT_255;
-				}
-			}
-			break;	
-		case EXIT_255: //退出定点
-			pidRest(&pPidObject[8],4);	
-			flow_control_status = WAITING_1;
-			break;
-		default:
-			flow_control_status = WAITING_1;
-			break;		
-	}
+    if(!(dt>0))return;
+    float x=Remote.roll>1750 ? -15 : Remote.roll<1250 ? 15 : 0;
+    float y=Remote.pitch>1750 ? 15 : Remote.pitch<1250 ? -15 : 0;
+    uint8_t captured=flow_axis_update(&flow_axis[0],&pidPositionX,&pidPosRateX,
+        x,flow_x_lpf_att_i,flow_x_vel_lpf_i,dt);
+    captured|=flow_axis_update(&flow_axis[1],&pidPositionY,&pidPosRateY,
+        y,flow_y_lpf_att_i,flow_y_vel_lpf_i,dt);
+    if(captured)++flow_target_captures;
+    pidRoll.desired=LIMIT(pidPosRateX.out,-FLOW_ANGLE_MAX_DEG,FLOW_ANGLE_MAX_DEG);
+    pidPitch.desired=-LIMIT(pidPosRateY.out,-FLOW_ANGLE_MAX_DEG,FLOW_ANGLE_MAX_DEG);
 }
 /**************************************************************
  *  flight control

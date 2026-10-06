@@ -26,6 +26,7 @@ def crc(data):
 
 parser=argparse.ArgumentParser()
 parser.add_argument('--baseline',type=Path,required=True)
+parser.add_argument('--protocol-only',action='store_true',help='Allow intentional horizontal-control changes; still compare estimator and verify wire protocol')
 args=parser.parse_args()
 a,b=FlowMachine(),FlowMachine()
 # Replace the second emulated image with the previously flashed baseline.
@@ -49,7 +50,8 @@ for i,t in enumerate(range(0,4801,6)):
             m.rc(1500,1800 if 500<t<850 else 1500,1500,1500)
             m.estimate();m.control()
     if t%24==0:
-        check('control state/output identical '+str(t),all(a.get(n,'13f')==b.get(n,'13f') for n in compare))
+        if not args.protocol_only:
+            check('control state/output identical '+str(t),all(a.get(n,'13f')==b.get(n,'13f') for n in compare))
         check('estimate identical '+str(t),all(a.get(n,'f')==b.get(n,'f') for n in
               ['flow_x_lpf_att_i','flow_y_lpf_att_i','flow_x_vel_lpf_i','flow_y_vel_lpf_i']))
 
@@ -98,6 +100,7 @@ for value,scale,expected,flags in [(1.25,100,125,0),(-1.25,100,65411,0),
 report={'passed':len(checks),'failed':0,'hardware_access':False,'actual_ELF':True,
         'elf_sha256':hashlib.sha256((root/'Output/gcc/official_hand.elf').read_bytes()).hexdigest(),
         'baseline_sha256':hashlib.sha256(args.baseline.read_bytes()).hexdigest(),
+        'control_equivalence_checked':not args.protocol_only,
         'normal_frames':len(base),'diagnostic_frames':len(diag),'complete_samples':len(complete),
         'sample_pages_example':g,'checks':checks}
 (root/'Output/gcc/flow-diagnostics-verification.json').write_text(json.dumps(report,indent=2),encoding='utf-8')

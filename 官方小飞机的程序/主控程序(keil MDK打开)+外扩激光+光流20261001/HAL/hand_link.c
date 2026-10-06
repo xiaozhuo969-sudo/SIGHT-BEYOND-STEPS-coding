@@ -160,12 +160,9 @@ void hand_link_tick(void) {
  if(!ALL_flag.flow_control) {
   pidRoll.desired=(1500-(int)Remote.roll)*0.04f;
   pidPitch.desired=(1500-(int)Remote.pitch)*0.04f;
- } else {
-  /* The native flow branch leaves the OTHER axis at its old command when a
-   * new axis is selected. Clear only the released gesture axis here. */
-  if(Remote.roll==1500)pidPosRateX.desired=0;
-  if(Remote.pitch==1500)pidPosRateY.desired=0;
  }
+ /* FlowPidControl owns both horizontal targets, including released axes.
+  * Do not overwrite its position correction between 24 ms control ticks. */
  if(Remote.yaw>1820)pidYaw.desired-=10.0f*dt/1000.0f;
  else if(Remote.yaw<1180)pidYaw.desired+=10.0f*dt/1000.0f;
 }
