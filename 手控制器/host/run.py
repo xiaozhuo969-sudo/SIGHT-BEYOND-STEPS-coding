@@ -928,14 +928,12 @@ class App(tk.Tk):
             setattr(self, attr, value)
         self.pattern = self._label(panel, "当前灯效：--", 11, ACCENT)
         self.pattern.pack(anchor="w", padx=25, pady=(6, 0))
-        self._label(panel, "GPIO47 为定高按键，不参与灯光输出", 10, MUTED).pack(anchor="w", padx=25)
+        self._label(panel, "短按切换灯效 · 长按 1.2 秒开关灯光", 10, MUTED).pack(anchor="w", padx=25)
 
         self.flight_start_key = self._label(panel, "LED1 · 一键起飞：未连接", 10, MUTED)
         self.flight_start_key.pack(anchor="w", padx=25, pady=(5, 0))
         self.flight_stop_key = self._label(panel, "LED2 · 急停：未连接", 10, MUTED)
         self.flight_stop_key.pack(anchor="w", padx=25)
-        self.flight_hold_key = self._label(panel, "GPIO47 · 定高按键：未连接", 10, MUTED)
-        self.flight_hold_key.pack(anchor="w", padx=25)
         self.flight_key_status = self._label(panel, "上电自动连接 · 平放后按 LED1 起飞", 10, MUTED)
         self.flight_key_status.pack(anchor="w", padx=25, pady=(3, 0))
 
@@ -1144,12 +1142,6 @@ class App(tk.Tk):
             f"LED2 · 急停：{'按下' if frame.get('key_stop') else '松开'}  ·  {int(frame.get('key_stop_count', 0))} 次"
             if keys_supported else "LED2 · 急停：等待新固件"),
             fg=PINK if frame.get("key_stop") else MUTED)
-        hold_reason = {0: "手势控制", 1: "当前非可定高飞行状态", 2: "定高不可用", 3: "飞机回传不新鲜"}
-        self.flight_hold_key.config(text=(
-            f"GPIO47 · {'按下' if frame.get('key_hold') else '松开'} · {frame.get('key_hold_count', 0)} 次 · "
-            + ("定高保持中" if frame.get('height_hold') else hold_reason.get(frame.get('hold_reason', 0), "等待状态"))
-            if "key_hold" in frame else "GPIO47 · 定高按键：等待新固件"),
-            fg=ACCENT if frame.get("height_hold") else MUTED)
         key_states = {0: "平放后按下并松开 LED1，连接并起飞", 1: "一键起飞：连接中 · 请保持平放",
                       2: "一键起飞：等待解锁确认", 3: "一键起飞：已请求缓升", 4: "实体按键控制中 · LED2 可急停",
                       5: "急停：正在发送锁定", 6: "急停流程已结束 · 锁定状态见飞机回传", 7: "操作未完成",
@@ -1223,7 +1215,6 @@ class App(tk.Tk):
         self.button_state.config(text="未连接")
         self.flight_start_key.config(text="LED1 · 一键起飞：未连接", fg=MUTED)
         self.flight_stop_key.config(text="LED2 · 急停：未连接", fg=MUTED)
-        self.flight_hold_key.config(text="GPIO47 · 定高按键：未连接", fg=MUTED)
         self.flight_key_status.config(text="等待实体按键状态", fg=MUTED)
         self.button_indicator.config(bg=PANEL_ALT, fg=MUTED)
         self.gesture_title.config(text="等待手势数据", fg=MUTED)

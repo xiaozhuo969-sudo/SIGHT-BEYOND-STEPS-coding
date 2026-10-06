@@ -14,8 +14,6 @@ void telemetry_set_ppg_quality(float correlation, float quality, uint32_t contac
 void telemetry_set_button(bool pressed);
 void telemetry_flight_keys_init(bool start_down, bool stop_down);
 void telemetry_flight_key(unsigned key, bool pressed);
-void telemetry_hold_key_init(bool pressed);
-void telemetry_hold_key(bool pressed);
 void telemetry_set_led(bool enabled, unsigned pattern);
 void telemetry_set_motor(unsigned channel, unsigned strength);
 

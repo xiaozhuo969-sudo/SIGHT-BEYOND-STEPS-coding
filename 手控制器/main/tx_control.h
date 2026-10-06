@@ -9,11 +9,8 @@ enum { TX_OFF=0, TX_READY=1, TX_STOPPING=9, TX_FAULT=10, TX_ARM_REQUEST=11,
        TX_ALT_LOST=16, TX_ALT_MANUAL=17, TX_ALT_RESUME=18 };
 enum { TX_REASON_NONE, TX_REASON_STOP, TX_REASON_HEARTBEAT, TX_REASON_IMU, TX_REASON_RADIO,
        TX_REASON_FEEDBACK, TX_REASON_ARM_TIMEOUT, TX_REASON_AIR_LOCK };
-enum { HOLD_OK, HOLD_NOT_FLYING, HOLD_NO_HEIGHT, HOLD_NO_LINK };
 typedef struct {
     unsigned phase, reason, sent;
-    bool height_hold;
-    unsigned hold_reason;
     hand_feedback_t guard;
     uint32_t since, heartbeat;
     uint16_t aux;
@@ -38,7 +35,6 @@ typedef struct {
     uint32_t telemetry_ms, air_telem_frames, air_telem_gap_ms, air_telem_max_gap_ms;
 } tx_control_t;
 bool tx_clear_obstacle(tx_control_t *s, uint32_t now);
-bool tx_toggle_height_hold(tx_control_t *s, uint32_t now);
 void tx_guard_refresh(tx_control_t *s, uint32_t now);
 bool tx_arm(tx_control_t *s, uint32_t now, bool flat_calibrated);
 void tx_stop(tx_control_t *s, uint32_t now, unsigned reason);

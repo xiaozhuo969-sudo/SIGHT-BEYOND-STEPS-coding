@@ -45,8 +45,6 @@ typedef struct {
     bool ppg_ok;
     bool finger;
     bool button;
-    bool hold_button;
-    unsigned hold_presses;
     bool leds;
     int64_t attitude_us;
     int64_t ppg_us;
@@ -221,30 +219,6 @@ void telemetry_flight_key(unsigned key, bool pressed)
     portEXIT_CRITICAL(&s_mux);
 }
 
-void telemetry_hold_key_init(bool pressed)
-{
-    portENTER_CRITICAL(&s_mux);
-    s_state.hold_button=pressed;
-    portEXIT_CRITICAL(&s_mux);
-}
-
-void telemetry_hold_key(bool pressed)
-{
-    portENTER_CRITICAL(&s_mux);
-    bool edge=pressed && !s_state.hold_button;
-    s_state.hold_button=pressed;
-    if(edge) {
-        ++s_state.hold_presses;
-        if(!s_keys.down[1] && !s_keys.stop_latched)
-            tx_toggle_height_hold(&s_tx,(uint32_t)(esp_timer_get_time()/1000));
-        else s_tx.hold_reason=HOLD_NOT_FLYING;
-        if(s_tx.height_hold) for(unsigned i=0;i<4;++i) s_preview[i]=1500;
-    }
-    bool hold=s_tx.height_hold;unsigned reason=s_tx.hold_reason;
-    portEXIT_CRITICAL(&s_mux);
-    if(edge) ESP_LOGI(TAG,"GPIO47 hold press: active=%u reason=%u",hold,reason);
-}
-
 void telemetry_set_button(bool pressed)
 {
     portENTER_CRITICAL(&s_mux);
@@ -269,7 +243,6 @@ void telemetry_indicator_snapshot(bool *air, bool *obstacle, unsigned *gesture, 
         esp_timer_get_time()-s_state.attitude_us<500000 ? s_signal : GESTURE_UNKNOWN;
     if(s_tx.guard.hold && !(s_tx.phase==TX_ALT_MANUAL && *gesture==GESTURE_DOWN))
         *gesture=GESTURE_UNKNOWN;
-    if(s_tx.height_hold) *gesture=GESTURE_UNKNOWN;
     *test_pin=s_led_test_pin;
     portEXIT_CRITICAL(&s_mux);
 }
@@ -343,7 +316,6 @@ static void control_task(void *arg)
             s_gesture.calibrated && s_signal==GESTURE_FLAT,
             s_gesture.calibrated && s_gesture.phase==1,s_state.button);
         tx_guard_refresh(&s_tx,now_ms);
-        if(s_tx.height_hold) for(unsigned i=0;i<4;++i) s_preview[i]=1500;
         bool obstacle_alarm=s_tx.guard.hold;
         bool tilt_alarm=s_tx.guard.tilt;
         portEXIT_CRITICAL(&s_mux);
@@ -442,7 +414,6 @@ static void telemetry_task(void *arg)
                "\"button\":%u,\"presses\":%u,\"leds\":%u,\"pattern\":%u,"
                "\"key_start\":%u,\"key_stop\":%u,\"key_start_count\":%u,\"key_stop_count\":%u,"
                "\"key_status\":%u,\"key_reason\":%u,\"key_local\":%u,\"key_pending\":%u,\"key_stop_latched\":%u,\"key_auto\":%u,"
-               "\"key_hold\":%u,\"key_hold_count\":%u,\"height_hold\":%u,\"hold_reason\":%u,"
                "\"motor0\":%u,\"motor1\":%u,"
                "\"gesture\":%u,\"fist\":%u,\"gpitch\":%.1f,\"groll\":%.1f,"
                "\"gvalid\":%u,\"gcal\":%u,\"ginvp\":%u,\"ginvr\":%u,\"gswap\":%u,\"gphase\":%u,\"gconfirm\":%u,"
@@ -475,7 +446,6 @@ static void telemetry_task(void *arg)
                state.button, state.presses, state.leds,
                state.pattern, keys.down[0],keys.down[1],keys.presses[0],keys.presses[1],
                keys.status,keys.reason,keys.local_owner,keys.pending,keys.stop_latched,keys.auto_connect,
-               state.hold_button,state.hold_presses,tx.height_hold,tx.hold_reason,
                state.motor[0], state.motor[1],
                gesture.signal, state.button, gesture.pitch, gesture.roll,
                gesture.valid, settings.calibrated, settings.invert_pitch,
@@ -557,7 +527,7 @@ static void command_task(void *arg)
         if(!strncmp(line,"@L,",3)) {
             int pin=-2;
             bool parsed=sscanf(line,"@L,TEST,%d %c",&pin,&tail)==1;
-            bool valid=pin==-1 || pin==12 || pin==13 || pin==14 || pin==21;
+            bool valid=pin==-1 || pin==12 || pin==13 || pin==14 || pin==21 || pin==47;
             uint32_t now=(uint32_t)(esp_timer_get_time()/1000);
             portENTER_CRITICAL(&s_mux);
             bool safe=(s_tx.phase==TX_OFF || s_tx.phase==TX_FAULT ||
