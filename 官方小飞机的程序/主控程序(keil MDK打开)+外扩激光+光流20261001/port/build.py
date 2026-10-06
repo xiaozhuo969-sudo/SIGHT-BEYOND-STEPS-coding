@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
 """Build the supplied official C sources with GCC; no reconstructed flight code."""
 from pathlib import Path
-import hashlib,json,re,subprocess,xml.etree.ElementTree as ET
-ROOT=Path(__file__).resolve().parents[1]
-BUILD=ROOT/'Output/gcc'
+import hashlib,json,re,subprocess,os,xml.etree.ElementTree as ET
+ROOT=Path(os.environ.get('FLIGHT_ROOT',Path(__file__).resolve().parents[1]))
+BUILD=Path(os.environ.get('FLIGHT_BUILD_DIR',ROOT/'Output/gcc'))
 INCLUDES=[ROOT/x for x in ('StartUp','Lib/inc','Lib/src','USER','MATH','CONFIG','HARDWARE','HAL','USB_hid','USB_library','port')]
 def run(a):
  p=subprocess.run([str(x) for x in a],capture_output=True,text=True,errors='replace')
@@ -19,8 +19,8 @@ def main():
   for src in [*d.glob('*.c'),*d.glob('*.h')]:
    for name in re.findall(rb'#\s*include\s*"([^"/]+)"',src.read_bytes()):
     name=name.decode('ascii');target=headers.get(name.lower())
-    if target and name!=target.name:
-     (aliases/name).write_text('#include "'+str(target)+'"\n')
+    if os.name!='nt' and target and name!=target.name:
+     (aliases/name).write_text('#include "'+target.as_posix()+'"\n')
  sources=[]
  for f in ET.parse(ROOT/'mini.uvprojx').findall('.//File'):
   name=f.findtext('FilePath','').replace('\\','/')

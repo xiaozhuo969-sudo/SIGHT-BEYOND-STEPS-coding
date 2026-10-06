@@ -4,6 +4,8 @@
 #include "obstacle.h"
 #include "../../../shared/hand_protocol.h"
 #include <math.h>
+#include "../../../shared/flight_feedback.h"
+static flight_feedback_t feedback;
 
 volatile HandLinkState hand_link;
 volatile uint32_t hand_milliseconds;
@@ -46,6 +48,7 @@ static void locked(unsigned reason) {
  for(unsigned i=0;i<4;i++)motor_PWM_Value[i]=0;
  TIM2->CCR1=TIM2->CCR2=TIM2->CCR3=TIM2->CCR4=0;
  manual_landing=false;
+ feedback=(flight_feedback_t){0};
  hand_link.stage=reason?HC_STAGE_FAULT:HC_STAGE_LOCKED;hand_link.collective=0;
  hand_link.recovery_ready=0;hand_link.recovery_since=0;
  LED.status=AllFlashLight;LED.FlashTime=300;
@@ -88,6 +91,13 @@ void hand_link_init(void) {Remote.thr=1000;neutral();for(unsigned i=4;i<8;i++)((
 
 /* Called in the existing 3 ms scheduler before native attitude and motor control.
  * Main-loop/SPI stalls cannot keep an old control command alive. */
+static void update_feedback(void) {
+ uint16_t cm=obstacle_distance_cm();
+ bool flying=ALL_flag.unlock && hand_link.stage!=HC_STAGE_IDLE;
+ flight_feedback_update(&feedback,hand_milliseconds,flying,cm!=HC_DISTANCE_UNKNOWN,cm,
+     obstacle.last_ms,hand_link.imu_ok && elapsed(hand_link.imu_ms)<=100 &&
+     isfinite(Angle.pitch) && isfinite(Angle.roll),Angle.pitch,Angle.roll);
+}
 void hand_link_tick(void) {
  remote_timeout_tick();
  if(!hand_link.owned)return;
@@ -97,6 +107,7 @@ void hand_link_tick(void) {
   hand_link.active=hand_link.owned=0;reply_pending=false;
   remote_reset_session();return;
  }
+ update_feedback();
  if(!ALL_flag.unlock)return;
  if(elapsed(hand_link.imu_ms)>100) {locked(HC_IMU);return;}
  if(!isfinite(Angle.roll)||!isfinite(Angle.pitch)) {locked(HC_IMU);return;}
@@ -121,7 +132,7 @@ void hand_link_tick(void) {
   bool landing=hand_link.stage==HC_STAGE_LAND;manual();
   if(landing) {manual_landing=true;hand_link.stage=HC_STAGE_LAND;}
  }
- if(hand_link.stage==HC_STAGE_HOLD)Remote.thr=input[2];
+ if(hand_link.stage==HC_STAGE_HOLD)Remote.thr=feedback.hold?1500:input[2];
  else if(hand_link.stage==HC_STAGE_LAND) {
   neutral();
   if(manual_landing) {
@@ -140,9 +151,18 @@ void hand_link_tick(void) {
   if(ramp_collective<205)ramp_collective=205;if(ramp_collective>650)ramp_collective=650;
   Remote.thr=throttle_from_collective(ramp_collective);
  }
+ /* A lost height sensor retains native manual vertical recovery. LAND/STOP
+  * above always have priority. Hold horizontal/yaw until a fresh button command. */
+ if(feedback.hold) {
+  Remote.roll=Remote.pitch=Remote.yaw=1500;
+  if(!ALL_flag.flow_control)pidRoll.desired=pidPitch.desired=0;
+  pidPosRateX.desired=pidPosRateY.desired=0;return;
+ }
+ /* An unknown front range inhibits forward motion only. */
+ uint16_t safe_pitch=(obstacle_distance_cm()==HC_DISTANCE_UNKNOWN && input[1]>1500)?1500:input[1];
  /* Keep bounded attitude gestures; translate only flow/yaw switch thresholds. */
  Remote.roll=ALL_flag.flow_control?(input[0]<1500?1200:input[0]>1500?1800:1500):input[0];
- Remote.pitch=ALL_flag.flow_control?(input[1]<1500?1200:input[1]>1500?1800:1500):input[1];
+ Remote.pitch=ALL_flag.flow_control?(safe_pitch<1500?1200:safe_pitch>1500?1800:1500):safe_pitch;
  Remote.yaw=input[3]<1500?1100:input[3]>1500?1900:1500;
  if(!ALL_flag.flow_control) {
   pidRoll.desired=(1500-(int)Remote.roll)*0.04f;
@@ -171,6 +191,9 @@ void hand_link_motor_observe(void) {
 static void make_reply(const hc_packet_t *p) {
  hc_packet_t s={.version=3,.command=HC_STATUS,.session=p->session,.sequence=p->sequence};
  s.channels[0]=(ALL_flag.unlock?1:0)|(ALL_flag.height_lock?2:0)|(ALL_flag.flow_control?16:0);
+ s.channels[0]|=HC_FLAG_FEEDBACK_SUPPORTED | (feedback.hold?HC_FLAG_OBSTACLE:0) |
+     (feedback.ready?HC_FLAG_OBSTACLE_READY:0) | ((feedback.tilt||hand_link.last_fault==HC_TILT)?HC_FLAG_TILT:0) |
+     (obstacle_distance_cm()==HC_DISTANCE_UNKNOWN?HC_FLAG_RANGE_INVALID:0);
  s.channels[1]=hand_link.reason;s.channels[2]=Remote.thr;s.channels[3]=p->command;
  s.channels[4]=(uint16_t)hand_link.received;s.channels[7]=(uint16_t)hand_link.bad;
  s.state=hand_link.stage;
@@ -191,7 +214,7 @@ static void make_reply(const hc_packet_t *p) {
 bool hand_link_receive(const uint8_t raw[32]) {
  if(raw[0]!='H'||raw[1]!='C')return hand_link_owned();
  hc_packet_t p;
- if(!hc_decode(raw,&p)||p.version!=3||p.command>HC_RESUME) {++hand_link.bad;return true;}
+ if(!hc_decode(raw,&p)||p.version!=3||p.command>HC_CLEAR_OBSTACLE) {++hand_link.bad;return true;}
  for(unsigned i=0;i<8;i++)if(p.channels[i]<1000||p.channels[i]>2000) {++hand_link.bad;return true;}
  if(p.command!=HC_DISARM&&!(p.assist&1)) {++hand_link.bad;return true;}
  uint32_t key=enter_critical();
@@ -244,6 +267,13 @@ bool hand_link_receive(const uint8_t raw[32]) {
   else if(hand_link.stage==HC_STAGE_TAKEOFF||hand_link.stage==HC_STAGE_MANUAL) {
    manual();manual_landing=true;hand_link.stage=HC_STAGE_LAND;neutral();
   }else {hand_link.stage=HC_STAGE_LAND;neutral();Remote.thr=1100;}
+ }else if(p.command==HC_CLEAR_OBSTACLE) {
+  update_feedback();
+  if((hand_link.stage==HC_STAGE_HOLD||hand_link.stage==HC_STAGE_MANUAL) &&
+      (!feedback.hold || flight_feedback_clear(&feedback))) {
+   for(unsigned i=0;i<4;i++)input[i]=1500;
+   hand_link.reason=hand_link.stage==HC_STAGE_MANUAL?HC_HEIGHT:HC_OK;
+  } else hand_link.reason=HC_OBSTACLE;
  }else if(p.command==HC_RESUME) {
   bool center=p.channels[0]==1500&&p.channels[1]==1500&&p.channels[2]==1500&&p.channels[3]==1500;
   if(hand_link.stage==HC_STAGE_MANUAL&&hand_link.recovery_ready&&center)assist_start();

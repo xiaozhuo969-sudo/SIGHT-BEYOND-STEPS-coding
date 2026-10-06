@@ -21,6 +21,19 @@
 static const char *TAG="camera_uplink";
 static EventGroupHandle_t network_events;
 #define HAS_IP BIT0
+static portMUX_TYPE status_mux=portMUX_INITIALIZER_UNLOCKED;
+static int64_t last_ack_us;
+static void upload_status(bool ok) {
+    portENTER_CRITICAL(&status_mux);
+    last_ack_us=ok?esp_timer_get_time():0;
+    portEXIT_CRITICAL(&status_mux);
+}
+bool camera_uplink_healthy(void) {
+    portENTER_CRITICAL(&status_mux);
+    int64_t stamp=last_ack_us;
+    portEXIT_CRITICAL(&status_mux);
+    return stamp && esp_timer_get_time()-stamp<1000000;
+}
 
 static void wifi_event(void *arg,esp_event_base_t base,int32_t event,void *data)
 {
@@ -88,6 +101,7 @@ static void uplink_task(void *arg)
     ESP_LOGI(TAG,"Camera=%s at %s; upload every %d ms",CONFIG_HAND_CAMERA_SSID,CONFIG_HAND_CAMERA_HOST,HUD_UPLOAD_MS);
     for (;;) {
         if (!(xEventGroupGetBits(network_events)&HAS_IP)) {
+            upload_status(false);
             if (connected) { esp_transport_close(ws); connected=false; }
             int64_t now=esp_timer_get_time();
             if (now>=next_wifi) {
@@ -119,8 +133,8 @@ static void uplink_task(void *arg)
            no offline queue or catch-up burst can block the NRF24 task. */
         if (len<0 || esp_transport_ws_send_raw(ws,WS_TRANSPORT_OPCODES_TEXT|WS_TRANSPORT_OPCODES_FIN,body,len,100)!=len ||
             !receive_ack(ws,session,seq)) {
-            ++failures; esp_transport_close(ws); connected=false;
-        } else ++sent;
+            ++failures; upload_status(false); esp_transport_close(ws); connected=false;
+        } else { ++sent; upload_status(true); }
         if (began-last_log>=5000000) {
             ESP_LOGI(TAG,"sent=%"PRIu32" failures=%"PRIu32" input_mV=%"PRId32" aircraft_age_ms=%"PRId32,
                 sent,failures,sample.voltage_mv==HUD_NA ? -1 : sample.voltage_mv,

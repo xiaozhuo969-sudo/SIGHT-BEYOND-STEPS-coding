@@ -5,11 +5,13 @@
 #include "driver/gpio.h"
 #include "esp_log.h"
 #include "freertos/FreeRTOS.h"
-#include "freertos/queue.h"
 #include "freertos/task.h"
 #include "iot_button.h"
 #include "led_demo.h"
 #include "telemetry.h"
+#include "camera_uplink.h"
+#include "gesture.h"
+#include "esp_timer.h"
 
 // H5: GPIO9 palm; former LED1/LED2 are now flight buttons on GPIO10/11.
 // The remaining LEDs turn on at GPIO low; flight buttons read high at rest.
@@ -19,7 +21,9 @@
 #define FLIGHT_BUTTON_ACTIVE_LEVEL 0
 #define ALARM_LED_GPIO GPIO_NUM_5
 #define LED_COUNT 5
-#define STEP_TIME_MS 150
+// Role order: aircraft link, camera link, left, right, down.
+// Physical lamp assignment is awaiting the user's one-at-a-time identification.
+static const int s_role_pins[LED_COUNT]={-1,-1,-1,-1,-1};
 
 static const gpio_num_t s_led_pins[LED_COUNT] = {
     GPIO_NUM_12, GPIO_NUM_13,
@@ -52,53 +56,11 @@ static void flight_key_up(void *button, void *user_data)
     telemetry_flight_key((unsigned)(uintptr_t)user_data,false);
 }
 
-typedef enum {
-    NEXT_PATTERN,
-    TOGGLE_LEDS,
-} led_action_t;
-
-static QueueHandle_t s_action_queue;
-
 static void show_leds(uint8_t mask)
 {
     for (unsigned i = 0; i < LED_COUNT; ++i) {
         gpio_set_level(s_led_pins[i], (mask & (1U << i)) ? 0 : 1);
     }
-}
-
-static uint8_t pattern_frame(unsigned pattern, unsigned phase)
-{
-    if (pattern == 0) {  // One light moves from the first finger to the last.
-        return (uint8_t)(1U << phase);
-    }
-    if (pattern == 1) {  // One light bounces back and forth.
-        unsigned pos = phase < LED_COUNT ? phase : 2 * LED_COUNT - 2 - phase;
-        return (uint8_t)(1U << pos);
-    }
-    // Fill from the first finger, then clear from the last.
-    unsigned on_count = phase < LED_COUNT ? phase + 1 : 2 * LED_COUNT - 1 - phase;
-    return (uint8_t)((1U << on_count) - 1U);
-}
-
-static unsigned pattern_length(unsigned pattern)
-{
-    return pattern == 0 ? LED_COUNT : pattern == 1 ? 2 * LED_COUNT - 2 : 2 * LED_COUNT;
-}
-
-static void button_short_cb(void *button, void *user_data)
-{
-    (void)button;
-    (void)user_data;
-    const led_action_t action = NEXT_PATTERN;
-    xQueueSend(s_action_queue, &action, 0);
-}
-
-static void button_long_cb(void *button, void *user_data)
-{
-    (void)button;
-    (void)user_data;
-    const led_action_t action = TOGGLE_LEDS;
-    xQueueSend(s_action_queue, &action, 0);
 }
 
 static void button_down_cb(void *button, void *user_data)
@@ -118,37 +80,22 @@ static void button_up_cb(void *button, void *user_data)
 static void led_task(void *arg)
 {
     (void)arg;
-    unsigned pattern = 0;
-    unsigned phase = 0;
-    bool enabled = true;
-    const char *names[] = {"forward", "bounce", "fill/clear"};
-    ESP_LOGI(TAG, "LED mode on, pattern: %s", names[pattern]);
-    telemetry_set_led(enabled, pattern);
-    while (true) {
-        led_action_t action;
-        if (xQueueReceive(s_action_queue, &action, pdMS_TO_TICKS(STEP_TIME_MS)) == pdTRUE) {
-            if (action == NEXT_PATTERN) {
-                if (enabled) {
-                    pattern = (pattern + 1) % 3;
-                    phase = 0;
-                    ESP_LOGI(TAG, "pattern: %s", names[pattern]);
-                }
-            } else {
-                enabled = !enabled;
-                phase = 0;
-                ESP_LOGI(TAG, "LED mode %s", enabled ? "on" : "off");
-            }
-            if (!enabled) {
-                telemetry_set_led(enabled, pattern);
-                show_leds(0);
-                continue;
-            }
-            telemetry_set_led(enabled, pattern);
+    ESP_LOGI(TAG,"LED roles unassigned; identify with @L,TEST,12/13/14/21/47 (-1=off)");
+    for(;;) {
+        bool air,obstacle; unsigned gesture; int test_pin;
+        telemetry_indicator_snapshot(&air,&obstacle,&gesture,&test_pin);
+        bool roles[LED_COUNT]={air,camera_uplink_healthy(),gesture==GESTURE_LEFT,
+                              gesture==GESTURE_RIGHT,gesture==GESTURE_DOWN};
+        uint8_t mask=0;
+        for(unsigned i=0;i<LED_COUNT;++i) {
+            if(test_pin>=0) { if((int)s_led_pins[i]==test_pin) mask|=1U<<i; }
+            else for(unsigned r=0;r<LED_COUNT;++r)
+                if(s_role_pins[r]==(int)s_led_pins[i] && roles[r]) mask|=1U<<i;
         }
-        if (enabled) {
-            show_leds(pattern_frame(pattern, phase));
-            phase = (phase + 1) % pattern_length(pattern);
-        }
+        show_leds(mask);
+        gpio_set_level(ALARM_LED_GPIO,obstacle && (esp_timer_get_time()/250000)%2==0 ? 0:1);
+        telemetry_set_led(mask!=0,mask);
+        vTaskDelay(pdMS_TO_TICKS(25));
     }
 }
 
@@ -189,9 +136,6 @@ void led_demo_start(void)
     }
     ESP_LOGI(TAG,"LED1/GPIO10: connect+takeoff on release; LED2/GPIO11: immediate stop (active low)");
 
-    s_action_queue = xQueueCreate(8, sizeof(led_action_t));
-    ESP_ERROR_CHECK(s_action_queue ? ESP_OK : ESP_ERR_NO_MEM);
-
     // The assembled palm button measured high at rest and low when pressed.
     // A pull-down keeps GPIO9 low when the switch opens.
     const button_config_t button_config = {
@@ -206,8 +150,6 @@ void led_demo_start(void)
     button_handle_t button = NULL;
     ESP_ERROR_CHECK(iot_button_new_gpio_device(&button_config, &button_gpio, &button));
     ESP_ERROR_CHECK(gpio_set_pull_mode(PALM_BUTTON_GPIO, GPIO_PULLDOWN_ONLY));
-    ESP_ERROR_CHECK(iot_button_register_cb(button, BUTTON_SINGLE_CLICK, NULL, button_short_cb, NULL));
-    ESP_ERROR_CHECK(iot_button_register_cb(button, BUTTON_LONG_PRESS_START, NULL, button_long_cb, NULL));
     ESP_ERROR_CHECK(iot_button_register_cb(button, BUTTON_PRESS_DOWN, NULL, button_down_cb, NULL));
     ESP_ERROR_CHECK(iot_button_register_cb(button, BUTTON_PRESS_UP, NULL, button_up_cb, NULL));
     ESP_ERROR_CHECK(xTaskCreate(led_task, "led_demo", 3072, NULL, 5, NULL) == pdPASS

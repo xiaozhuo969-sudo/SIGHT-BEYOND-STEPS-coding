@@ -8,11 +8,12 @@
 #include "freertos/task.h"
 #include "telemetry.h"
 #include "vibration.h"
+#include "../../shared/haptic_policy.h"
 
 // XFJ (2).pdf: MOT0=GPIO18, MOT1=GPIO17. High drives the Darlington,
 // pulls the AO3401A P-MOS gate low and switches motor power on.
 #define MOTOR_COUNT 2
-#define MAX_PULSE_MS 2000
+#define MAX_PULSE_MS 3000
 #define PWM_MAX 255
 
 static const char *TAG = "vibration";
@@ -20,6 +21,14 @@ static const int s_pins[MOTOR_COUNT] = {18, 17};
 static SemaphoreHandle_t s_lock;
 static int64_t s_deadline_us[MOTOR_COUNT];
 static unsigned s_strength[MOTOR_COUNT];
+static haptic_policy_t s_alarm;
+static bool s_obstacle, s_tilt;
+
+void vibration_alerts(bool obstacle, bool tilt) {
+    if(!s_lock || xSemaphoreTake(s_lock,0)!=pdTRUE) return;
+    s_obstacle=obstacle;s_tilt=tilt;
+    xSemaphoreGive(s_lock);
+}
 
 static esp_err_t set_motor(unsigned channel, unsigned strength)
 {
@@ -46,7 +55,16 @@ esp_err_t vibration_pulse(unsigned channel, unsigned strength, unsigned duration
     if (xSemaphoreTake(s_lock, pdMS_TO_TICKS(100)) != pdTRUE) {
         return ESP_ERR_TIMEOUT;
     }
-    esp_err_t err = set_motor(channel, strength);
+    if(s_alarm.active || s_alarm.remaining[0] || s_alarm.remaining[1] ||
+       (s_obstacle && !s_alarm.obstacle_seen) || (s_tilt && !s_alarm.tilt_seen)) {
+        xSemaphoreGive(s_lock);return ESP_ERR_INVALID_STATE;
+    }
+    unsigned other=1-channel;
+    esp_err_t err=ESP_OK;
+    if(strength && s_strength[other]) {
+        err=set_motor(other,0);s_deadline_us[other]=0;
+    }
+    if(err==ESP_OK) err = set_motor(channel, strength);
     if (err == ESP_OK) {
         s_deadline_us[channel] = strength ? esp_timer_get_time() + duration_ms * 1000LL : 0;
     }
@@ -61,6 +79,17 @@ static void vibration_watchdog(void *arg)
         vTaskDelay(pdMS_TO_TICKS(20));
         if (xSemaphoreTake(s_lock, portMAX_DELAY) == pdTRUE) {
             const int64_t now = esp_timer_get_time();
+            unsigned previous=s_alarm.active;
+            unsigned alarm=haptic_update(&s_alarm,(uint32_t)(now/1000),s_obstacle,s_tilt);
+            if(alarm) {
+                unsigned other=2-alarm,channel=alarm-1;
+                esp_err_t stopped=ESP_OK;
+                if(s_strength[other]) stopped=set_motor(other,0);
+                if(stopped==ESP_OK && s_strength[channel]!=80) set_motor(channel,80);
+                s_deadline_us[0]=s_deadline_us[1]=0;
+                xSemaphoreGive(s_lock);continue;
+            }
+            if(previous) set_motor(previous-1,0);
             for (unsigned i = 0; i < MOTOR_COUNT; ++i) {
                 if (s_strength[i] && now >= s_deadline_us[i]) {
                     s_deadline_us[i] = 0;
@@ -100,5 +129,5 @@ void vibration_start(void)
     ESP_ERROR_CHECK(s_lock ? ESP_OK : ESP_ERR_NO_MEM);
     ESP_ERROR_CHECK(xTaskCreate(vibration_watchdog, "motor_watchdog", 2560,
                                 NULL, 5, NULL) == pdPASS ? ESP_OK : ESP_ERR_NO_MEM);
-    ESP_LOGI(TAG, "MOT0 GPIO18 and MOT1 GPIO17 ready; 2 s pulse limit");
+    ESP_LOGI(TAG, "MOT0 GPIO18 and MOT1 GPIO17 ready; 3 s pulse limit; tilt priority, motors mutually exclusive");
 }

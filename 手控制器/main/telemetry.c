@@ -68,6 +68,8 @@ static uint32_t s_tx_count, s_tx_errors;
 static uint32_t s_tx_rx_us, s_tx_rx_max_us, s_tx_rx_late;
 static bool s_radio_tx;
 static uint8_t s_actual_packet[32];
+static int s_led_test_pin=-1;
+static uint32_t s_led_test_ms;
 
 bool telemetry_tx_frame(uint8_t packet[32])
 {
@@ -212,6 +214,7 @@ void telemetry_flight_keys_init(bool start_down, bool stop_down)
 void telemetry_flight_key(unsigned key, bool pressed)
 {
     portENTER_CRITICAL(&s_mux);
+    if(key==0 && s_led_test_pin>=0) { portEXIT_CRITICAL(&s_mux); return; }
     flight_keys_edge(&s_keys,&s_tx,key,pressed,(uint32_t)(esp_timer_get_time()/1000));
     portEXIT_CRITICAL(&s_mux);
 }
@@ -219,11 +222,26 @@ void telemetry_flight_key(unsigned key, bool pressed)
 void telemetry_set_button(bool pressed)
 {
     portENTER_CRITICAL(&s_mux);
+    if(pressed && !s_state.button && !s_keys.down[1] && !s_keys.stop_latched)
+        tx_clear_obstacle(&s_tx,(uint32_t)(esp_timer_get_time()/1000));
     s_state.button = pressed;
     if (pressed) ++s_state.presses;
     portEXIT_CRITICAL(&s_mux);
 }
 
+void telemetry_indicator_snapshot(bool *air, bool *obstacle, unsigned *gesture, int *test_pin)
+{
+    uint32_t now=(uint32_t)(esp_timer_get_time()/1000);
+    portENTER_CRITICAL(&s_mux);
+    bool fresh=s_tx.feedback && s_tx.phase!=TX_OFF && s_tx.phase!=TX_FAULT &&
+               s_tx.phase!=TX_STOPPING && (uint32_t)(now-s_tx.feedback_ms)<300;
+    *air=fresh && !s_tx.link_warning;
+    *obstacle=fresh && (s_tx.air_flags&HC_FLAG_OBSTACLE);
+    *gesture=s_control_gesture.valid && s_state.imu &&
+        esp_timer_get_time()-s_state.attitude_us<500000 ? s_signal : GESTURE_UNKNOWN;
+    *test_pin=s_led_test_pin;
+    portEXIT_CRITICAL(&s_mux);
+}
 void telemetry_set_led(bool enabled, unsigned pattern)
 {
     portENTER_CRITICAL(&s_mux);
@@ -279,7 +297,8 @@ static void control_task(void *arg)
         const bool fresh=s_state.imu && now-s_state.attitude_us<500000 &&
                          isfinite(s_state.pitch) && isfinite(s_state.roll);
         flight_keys_autoconnect(&s_keys,&s_tx,now_ms,session,s_state.rc_ready,fresh);
-        if(flight_keys_begin(&s_keys,&s_tx,now_ms,session,s_state.rc_ready,fresh,s_state.button)) {
+        if(s_led_test_pin>=0 && (uint32_t)(now_ms-s_led_test_ms)>=10000) s_led_test_pin=-1;
+        if(s_led_test_pin<0 && flight_keys_begin(&s_keys,&s_tx,now_ms,session,s_state.rc_ready,fresh,s_state.button)) {
             // First physical launch records the hand's resting orientation.
             // Existing calibration/direction settings are preserved thereafter.
             if(!s_gesture.calibrated && tx_can_zero(&s_tx))
@@ -292,7 +311,13 @@ static void control_task(void *arg)
         flight_keys_tick(&s_keys,&s_tx,now_ms,s_state.rc_ready,fresh,
             s_gesture.calibrated && s_signal==GESTURE_FLAT,
             s_gesture.calibrated && s_gesture.phase==1,s_state.button);
+        bool alarm_fresh=s_tx.feedback && (uint32_t)(now_ms-s_tx.feedback_ms)<300;
+        bool obstacle_alarm=(s_tx.air_flags&HC_FLAG_OBSTACLE)!=0;
+        bool tilt_alarm=(s_tx.air_flags&HC_FLAG_TILT)!=0;
         portEXIT_CRITICAL(&s_mux);
+        // Outside telemetry's lock: motor publication takes this same lock.
+        // Do not turn a stale packet into an artificial new rising alarm edge.
+        if(alarm_fresh) vibration_alerts(obstacle_alarm,tilt_alarm);
         xTaskDelayUntil(&wake,pdMS_TO_TICKS(50));
     }
 }
@@ -468,7 +493,7 @@ static void command_task(void *arg)
             const bool hard_stop=flight_stop_pressed();
             portENTER_CRITICAL(&s_mux);
             if(hard_stop) flight_keys_edge(&s_keys,&s_tx,1,true,now);
-            const bool motion_allowed=!s_keys.down[1] && !s_keys.stop_latched && !s_keys.pending;
+            const bool motion_allowed=s_led_test_pin<0 && !s_keys.down[1] && !s_keys.stop_latched && !s_keys.pending;
             if (!strcmp(line, "@T,PING")) {
                 s_tx.heartbeat = now; accepted = true;
             } else if (!strcmp(line, "@T,START3")) {
@@ -491,6 +516,21 @@ static void command_task(void *arg)
             }
             portEXIT_CRITICAL(&s_mux);
             if (strcmp(line, "@T,PING")) ESP_LOGI(TAG, "%s %s", line, accepted ? "accepted" : "rejected");
+            continue;
+        }
+        if(!strncmp(line,"@L,",3)) {
+            int pin=-2;
+            bool parsed=sscanf(line,"@L,TEST,%d %c",&pin,&tail)==1;
+            bool valid=pin==-1 || pin==12 || pin==13 || pin==14 || pin==21 || pin==47;
+            uint32_t now=(uint32_t)(esp_timer_get_time()/1000);
+            portENTER_CRITICAL(&s_mux);
+            bool safe=(s_tx.phase==TX_OFF || s_tx.phase==TX_FAULT ||
+                (s_tx.phase==TX_READY && s_tx.feedback && now-s_tx.feedback_ms<300 && !(s_tx.air_flags&1))) &&
+                !s_keys.pending && !s_keys.launch_requested && !s_keys.down[0];
+            bool accepted=parsed && valid && (pin==-1 || safe);
+            if(accepted) { s_led_test_pin=pin; s_led_test_ms=now; }
+            portEXIT_CRITICAL(&s_mux);
+            ESP_LOGI(TAG,"LED identify GPIO%d %s (10 s, -1=off)",pin,accepted?"accepted":"rejected");
             continue;
         }
         // Zero calibration also allowed while sending fixed low-throttle lock frames.

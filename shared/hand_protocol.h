@@ -6,7 +6,7 @@
 
 /* HC v2/v3: 32 bytes, big endian, CRC-16/CCITT-FALSE over bytes 0..29.
  * Version 3 is explicit altitude control; it never changes v2 throttle semantics. */
-enum { HC_CONTROL=0, HC_ARM=1, HC_DISARM=2, HC_TAKEOFF=3, HC_LAND=4, HC_RESUME=5,
+enum { HC_CONTROL=0, HC_ARM=1, HC_DISARM=2, HC_TAKEOFF=3, HC_LAND=4, HC_RESUME=5, HC_CLEAR_OBSTACLE=6,
        HC_STATUS=0x80, HC_DETAIL=0x81, HC_DIAGNOSTICS=0x82, HC_TELEMETRY=0x83 };
 /* TELEMETRY only: channels[5..7] = pitch/roll in signed 0.01 deg, distance cm;
  * byte 26 is validity bits, not the uplink assist switches. */
@@ -15,12 +15,15 @@ enum { HC_ATTITUDE_VALID=1, HC_DISTANCE_VALID=2, HC_ATTITUDE_UNKNOWN=0x8000,
        HC_TELEMETRY_INTERVAL_MS=300 };
 enum { HC_OK=0, HC_NEED_LOCK=1, HC_NOT_LEVEL=2, HC_BAD_INPUT=3,
        HC_TIMEOUT=4, HC_LOCKED=5, HC_IMU=6, HC_GROUND=7, HC_TILT=8, HC_RADIO=9,
-       HC_HEIGHT=10, HC_TAKEOFF_TIMEOUT=11, HC_NOT_READY=12 };
+       HC_HEIGHT=10, HC_TAKEOFF_TIMEOUT=11, HC_NOT_READY=12, HC_OBSTACLE=13 };
 enum { HC_STAGE_LOCKED=0, HC_STAGE_IDLE=1, HC_STAGE_TAKEOFF=2, HC_STAGE_HOLD=3,
        HC_STAGE_LAND=4, HC_STAGE_HEIGHT_LOST=5, HC_STAGE_FAULT=6, HC_STAGE_MANUAL=7 };
 /* GROUND_READY now reports a captured ground reference only, not a launch gate. */
 enum { HC_STATE_RESUME_READY=0x20, HC_STATE_GROUND_READY=0x40, HC_STATE_HEIGHT_FRESH=0x80,
        HC_HEIGHT_UNKNOWN=0x8000 };
+/* STATUS channels[0]; also present in DETAIL/DIAGNOSTICS/TELEMETRY. */
+enum { HC_FLAG_OBSTACLE=0x20, HC_FLAG_OBSTACLE_READY=0x40, HC_FLAG_TILT=0x80,
+       HC_FLAG_RANGE_INVALID=0x100, HC_FLAG_FEEDBACK_SUPPORTED=0x200 };
 typedef struct {
     uint32_t session;
     uint16_t sequence, channels[8];
@@ -51,7 +54,7 @@ static inline bool hc_decode(const uint8_t p[32],hc_packet_t *v) {
         if(p[27]||p[28]||p[29]||p[26]>1||(p[3]>HC_DISARM&&p[3]!=HC_STATUS)) return false;
     } else {
         bool reply=p[3]==HC_STATUS||p[3]==HC_DETAIL||p[3]==HC_DIAGNOSTICS||p[3]==HC_TELEMETRY;
-        if(p[26]>3||(!reply&&p[3]>HC_RESUME)) return false;
+        if(p[26]>3||(!reply&&p[3]>HC_CLEAR_OBSTACLE)) return false;
         if(!reply&&(p[27]||p[28]||p[29])) return false;
         if(reply&&((p[27]&0x10)||(p[27]&0x0f)>HC_STAGE_MANUAL)) return false;
         if(p[3]==HC_TELEMETRY) {

@@ -1,0 +1,196 @@
+工程名称：小飞机——前向避障保持、手控灯和震动反馈
+文档版本：2026-10-06 编译验证版（五路灯物理用途待确认）
+文档编码：UTF-8
+
+一、工程目标和修改边界
+项目根目录：E:\APP\flay_111\小飞机
+本次仅调整 HC3 飞控入口、状态回传、手控指示与震动，增加本机测试及 Windows 编译入口。
+不调整原生姿态/高度/光流 PID 参数、电机混控、传感器接线、摄像头视频协议。
+保留原有掌心按住时中立控制、LED1 起飞按键、LED2 急停、主动降落和失联保护。
+五路灯的业务条件已实现，但物理分配仍待用户逐灯识别，当前 s_role_pins 全为 -1。
+
+二、资料及来源
+1. 用户在本会话确认：仅前方安装一个避障传感器；1 米遇障悬停；障碍闪灯、震动 3 秒；
+   飞机倾角过大震动；两路马达不同时运行，倾斜优先；左/右/下降灯表示手势。
+2. 用户最新确认：距离解除条件满足后，按一下掌心按钮解除保持，不增加平放等待条件。
+3. 手控制器/XFJ (2).pdf：ESP32-S3、五路灯/按键接口、H6 报警灯、MOT0/MOT1 接口。
+   GPIO 与现有 main/led_demo.c、main/vibration.c 交叉核对；实物灯位置尚未核对。
+4. 官方小飞机的程序/主控程序(keil MDK打开)+外扩激光+光流20261001：
+   HAL/hand_link.c、HAL/control.c、HARDWARE/obstacle.c、HARDWARE/flow.c、USER/scheduler.c。
+5. 官方小飞机的程序/14.关于激光定高的实现.pdf、15.关于光流定点的实现.pdf。
+6. shared/hand_protocol.h、手控制器/dependencies.lock、sdkconfig、main/idf_component.yml。
+7. 工程 README 部分内容早于现有代码；避障 UART3 已存在，不能按旧文档视为未实现接口。
+
+三、需求追踪
+REQ-001 前方 <=100 cm：在原有定高/光流飞行阶段进入持续保持，平移、偏航、垂直手势中立。
+来源：用户确认。实现：shared/flight_feedback.h、飞控 HAL/hand_link.c。
+有效范围沿用 20..720 cm、最近 600 ms 的 UART3 校验通过读数。
+无效/超时前向读数禁止继续前进，不伪造后/左/右传感器。
+离地起飞阶段保留原有上升/离地判定；进入定高后执行已锁存的避障保持。
+主动 LAND/急停优先；高度丢失时沿用原有手动推力恢复，不声称仍能定高。
+验收：100/101 cm 边界、无效读数、持续保持、起飞/降落/急停回归。
+
+REQ-002 障碍解除：距离 >120 cm 连续 500 ms，且结束时有新的有效测距，才提供解除资格。
+资格满足后，掌心按钮一次新的按下边沿发送 HC_CLEAR_OBSTACLE；飞控重新检查条件。
+不用平放；提前按住不会排队等待解除。按住仍为原有中立手势，松开恢复当前手势。
+原有“平放满 1 秒才发送前进”的手势识别逻辑保持，它不是解除避障的前置条件。
+解除指令最多重发 300 ms，收到对应回复后结束；急停/飞行阶段变化立即取消重发。
+丢包导致没有成功解除时再按一次；不会因为距离恢复自动继续飞行。
+实现：shared/hand_protocol.h、手控 tx_control.c/telemetry.c、飞控 hand_link.c。
+
+REQ-003 避障反馈：H6/GPIO5 低电平点亮，保持状态中每 250 ms 翻转（2 Hz 完整闪烁周期）。
+MOT0/GPIO18 每次新障碍保持事件震动 3000 ms，持续障碍不重复延长。
+REQ-004 倾斜反馈：飞机任意一轴 |pitch| 或 |roll| >30° 持续 200 ms 触发。
+两轴均 <25° 持续 500 ms 才解除。检测在飞控 3 ms 周期，不使用手部角度代替飞机角度。
+MOT1/GPIO17 每次倾斜事件震动 3000 ms。原有 >50° 保护保持，并回传硬倾斜故障提示。
+REQ-005 两路互斥：倾斜优先；中断的避障震动保留剩余时长，倾斜结束后继续。
+通用测试/弱通信提示不能覆盖正在执行的报警脉冲。软件 PWM 强度 80%，实物体感未验证。
+实现：shared/haptic_policy.h、手控 vibration.c。看门狗周期 20 ms，报警不阻塞控制任务。
+
+REQ-006 五路灯：通信灯 A 为新鲜、匹配会话的飞控回复；通信灯 B 为摄像头上传 ACK。
+飞机回复 <300 ms 且不处于链路警告时 A 常亮；匹配上传 ACK <1000 ms 时 B 常亮。
+其余三路分别表示有效 LEFT、RIGHT、DOWN 手势。DOWN 表示手势下降，不仅是 LAND 状态。
+来源：已确认的功能方案。尚未确认：五路灯到上述五种用途的实物映射。
+实现：led_demo.c 中 s_role_pins 按 [飞机通信, 相机通信, 左倾, 右倾, 下降] 排列，暂为 -1。
+旧流水灯及掌心短按换灯效/长按关闭灯效已移除，掌心控制和两个独立飞行按键保留。
+
+四、硬件和 IO
+飞控：STM32F103；UART3 接前向测距；I2C 接原有光流/下向激光高度。
+手控：ESP32-S3；原有 QMI8658A、NRF24、血氧模块和 Wi-Fi 上传逻辑保留。
+LED3 GPIO12，LED4 GPIO13，LED5 GPIO14，LED6 GPIO21，SW1 GPIO47：低电平点亮。
+上述 LED3 等为原理图/代码标识，并非最终确认的手套实物位置。
+H6/GPIO5：独立障碍报警灯。
+掌心 GPIO9，起飞 GPIO10，急停 GPIO11：低有效输入，不能当作可用灯输出。
+MOT0 GPIO18，MOT1 GPIO17：高有效 PWM，驱动电路沿用现有配置。
+下载和实物状态：本次尚未烧录；串口枚举时未发现可用设备。灯/马达和实际飞行均待台架验证。
+
+五、开发和编译环境
+主机：Windows / PowerShell。
+语言：嵌入式 C；飞控 -std=c99；测试 Python 3.11.9。
+ESP-IDF：v6.0.3，D:\Espressif\frameworks\esp-idf-v6.0.3。
+IDF_TOOLS_PATH：D:\Espressif\tools。与 D:\esp-idf-554、D:\esp-idf-602 隔离。
+ESP 目标：esp32s3；Xtensa GCC esp-15.2.0_20251204、CMake 4.0.3、Ninja 1.12.1。
+匹配工具版本由该 IDF 的 tools/tools.json 管理及校验；RISC-V/ULP 工具也已按该目标安装。
+ARM 目标工具：Arm GNU Toolchain 13.2.Rel1，D:\Espressif\arm。
+ARM 官方 ZIP 的 SHA256：51d933f00578aa28016c5e3c84f94403274ea7915539f8e56c13e2196437d18f。
+离线测试环境：D:\Espressif\test-python，unicorn 2.1.4、pyelftools 0.33、pyserial 3.5。
+本机 C 测试：已有 C:\ANZHUANG\mingw64\mingw64\bin\gcc.exe。
+安装及版本证据：D:\Espressif\logs；Python 完整版本记录 idf-python-freeze.txt。
+下载来源：
+https://github.com/espressif/esp-idf/releases/tag/v6.0.3
+https://docs.espressif.com/projects/esp-idf/en/v6.0.3/esp32/api-guides/tools/idf-tools.html
+https://armkeil.blob.core.windows.net/developer/Files/downloads/gnu/13.2.rel1/binrel/arm-gnu-toolchain-13.2.rel1-mingw-w64-i686-arm-none-eabi.zip
+
+六、目录及模块
+shared/flight_feedback.h：测距回差、保持资格和倾斜计时，不直接驱动电机。
+shared/haptic_policy.h：两个报警脉冲排程与剩余时长。
+shared/hand_protocol.h：HC3 命令 6、状态标志；原 32 字节布局和 CRC 不变。
+飞控 HAL/hand_link.c：在原生控制入口执行保持、回传状态、接受解除确认。
+手控 main/tx_control.c：解除请求及回复/超时；telemetry.c：按键与指示状态。
+手控 main/camera_uplink.c：提供已确认上传的链路状态；无需改摄像头固件。
+手控 main/led_demo.c、vibration.c：驱动灯与震动。
+tools/build_windows.ps1：D 盘环境构建入口，不执行烧录。
+tools/identify_leds.py：USB 逐灯识别，不发起 ARM/TAKEOFF。
+手控 tests/run_native.py、test_flight_feedback.c；飞控 port/verify.py：自动验证入口。
+
+七、软件流程和协议
+飞控 UART3 测距 -> 3 ms 策略更新 -> 指令入口中立/限制前进 -> 原生 PID 与电机混控。
+飞机倾角 -> 200/500 ms 回差 -> 每个 HC3 回复共同状态位 -> 手控报警。
+手控掌心按下 -> 校验新鲜解除资格 -> HC3 命令 6 -> 飞控再次检查 -> 回传对应结果。
+HC3 STATUS channels[0] 新增：0x20 避障保持、0x40 可确认解除、0x80 倾斜报警、
+0x100 前向测距无效、0x200 支持本次反馈功能。原解锁/定高/光流位不变。
+飞控锁定、失联、射频故障沿用原有处理；保持不是额外的永久禁用避障开关。
+
+八、环境准备和构建
+安装后的环境变量仅在脚本进程内生效，不替换用户的全局 PATH/其他 IDF。
+重建 SDK 环境时使用 Git/Python 3.11 执行（目录不存在时）：
+  git clone --depth 1 --branch v6.0.3 --recursive --shallow-submodules https://github.com/espressif/esp-idf.git D:\Espressif\frameworks\esp-idf-v6.0.3
+  $env:IDF_TOOLS_PATH='D:\Espressif\tools'
+  $env:PIP_INDEX_URL='https://pypi.org/simple'
+  python D:\Espressif\frameworks\esp-idf-v6.0.3\tools\idf_tools.py install --targets esp32s3
+  python D:\Espressif\frameworks\esp-idf-v6.0.3\tools\idf_tools.py install-python-env
+完整 Python 版本快照也保存在 tools/idf-python-freeze.txt；可在该 IDF 专属虚拟环境用 python -m pip install -r tools/idf-python-freeze.txt 复现。
+飞控使用 D:\Espressif\work 下的目录联接。手控每次编译前用 tools/stage_hand.py 创建
+D:\Espressif\sources\feedback 下的英文路径源码快照，并逐文件验证 SHA256，原始源码仍在 E 盘。
+原因：Windows ESP objdump 不支持本工程的中文路径，IDF 会把目录联接解析回中文路径；
+纯英文真实目录可解决原版同样出现的链接错误，不需要修改业务代码。
+PowerShell 命令（在项目根目录）：
+  .\tools\build_windows.ps1 -Target Hand
+  .\tools\build_windows.ps1 -Target Flight
+  .\tools\build_windows.ps1 -Target Test
+  .\tools\build_windows.ps1 -Target All
+输出分别为 D:\Espressif\builds\hand-release、flight-feedback，不覆盖原 Output 或 build 成品。
+Flight 目标构建后自动运行 Thumb ELF 仿真。All 不包含烧录。
+完整编译验证结果见第十二节；两端均编译通过。
+
+九、逐灯识别与运行
+需先完成新手控固件的台架烧录，确认 COM 端口；关闭占用同一端口的上位机。
+  D:\Espressif\test-python\Scripts\python.exe .\tools\identify_leds.py --port COM实际编号
+可输入 12、13、14、21、47，各次只亮一个 GPIO；-1 全灭，q 退出。
+固件每次 10 秒后退出识别。识别期间禁用起飞；飞行中拒绝进入识别模式。
+记录：GPIO12=待确认；GPIO13=待确认；GPIO14=待确认；GPIO21=待确认；GPIO47=待确认。
+用户确定两个小灯及左/右/下降灯后，再填写 s_role_pins 并重新编译。
+本次未执行硬件烧录，不把编译/仿真等同于实物联调。
+ESP 手控烧录入口（激活本文件所述 IDF 后，COM编号替换为实物端口）：
+  python D:\Espressif\frameworks\esp-idf-v6.0.3\tools\idf.py -C D:\Espressif\sources\feedback\hand -B D:\Espressif\builds\hand-release -p COM编号 flash
+STM32 的 official_hand.template.bin 是待合入实机校准页的模板，不能直接整片覆盖烧录。
+原 port/flash.py 依赖 Linux OpenOCD 路径和原部署记录；本次未将该烧录脚本移植至 Windows。
+后续 STM32 烧录须先读取并保留 0x08007C00..0x08007FFF 校准页，核验锁定/电机输出后再部署。
+
+十、最小修改边界审核
+核心控制 HAL/control.c、原 PID 参数、姿态解算、电机混控及校准页布局保持原样。
+保持时保留光流生成的目标姿态，避免每个 3 ms 周期将其强制清零而破坏定点修正。
+马达锁外获取/发布遥测，避免互相嵌套锁；新报警不从 USB 打印任务发起。
+命令含 CRC、会话及递增序号，陈旧状态不能作为解除许可。
+不推测五路灯的物理大小与用途；此处保留明确的待确认项。
+
+十一、Git 和回退
+原始基线提交：c553144b31400812e187e00be3b5b88dbbc4630a。
+原始基线标签：baseline-2026-10-06。
+开发分支：feature/obstacle-hover-feedback。
+本次编译验证版标签：feedback-stage1-2026-10-06（五路灯用途仍待实物确认）。
+完整文件备份：E:\APP\flay_111\小飞机_本地备份\2026-10-06-baseline\complete-project.zip。
+另有 file-manifest.json、repository.bundle；基线创建时做过逐文件校验。
+本次代码包和固件备份：E:\APP\flay_111\小飞机_本地备份\2026-10-06-feedback。
+需要查看旧版时优先另建工作目录：git worktree add <新的空目录> baseline-2026-10-06。
+不在有未保存修改的工作区直接执行 reset --hard。Git 能恢复代码，不能代替硬件验证。
+
+十二、已执行的测试记录（持续更新）
+TEST-001：run_native.py，8 组纯 C 可执行测试通过；新增保持/回差/倾斜/互斥/按键协议覆盖。
+TEST-002：IDF check-python-dependencies 通过，Python requirements are satisfied。
+TEST-003：原桌面上位机 35 项测试中 33 通过、2 个窗口布局失败；基线复现相同失败。
+  test_device_calibration_and_layout：窗口宽度 1100，控件右缘 1223。
+  test_estop_visible_every_page_and_shortcut：控件映射状态不符合原测试预期。
+  未修改 host/run.py；此处不是本次引入的飞控行为回归。
+TEST-004：血氧流测试用 Windows gcc / .exe 启动适配后通过；未改变采样源码。
+  原 unittest discover 同时出现 cc 不存在的环境错误，单独适配执行后已排除。
+日志：D:\Espressif\logs\native-tests.log、host-tests.log、baseline-host-tests.log、ppg-windows-test.log。
+TEST-005：STM32 原版和新固件均编译成功；原版 228 项、新版 245 项实际 Thumb ELF 检查通过。
+  新版 text=36524、data=744、bss=2232；相对同工具链原版 text 增加 736 字节、bss 增加 20 字节。
+  输出 D:\Espressif\builds\flight-feedback\official_hand.elf / official_hand.hex / official_hand.template.bin。
+  模板长度 131072 字节；0x7C00..0x7FFF 保留为 0xFF，部署时必须合入实机校准数据。
+  模板 SHA256：e14dc240ae4a5233c12297812f2d24829d1f4c0ce8819f8b455448db97ee963b。
+  验证明细 D:\Espressif\builds\flight-feedback\verification.json；日志 flight-verify.log。
+TEST-006：手控 ESP-IDF v6.0.3 原版及修改版完整编译通过，使用相同生成配置。
+  入口 tools/build_windows.ps1 -Target Hand 已实际执行通过。
+  原版应用 0xFF7F0 字节，修改版 0xFFC70 字节，增加 1152 字节。
+  当前 1 MiB 应用分区剩余 0x390=912 字节，两版均有原分区接近满额的告警；本次未改变分区。
+  输出 D:\Espressif\builds\hand-release\hand_controller_imu.bin；配套 bootloader 与分区表在同目录下。
+  日志 hand-release-build.log、baseline-hand-ascii-build.log。
+  所有 460 个英文目录编译输入在构建前后均与 E 盘源文件哈希一致。
+  交付摘要及固件 SHA256：verification/build-manifest.json；飞控检查明细：verification/flight-feedback.json。
+
+十三、已知限制和待验证项目
+五路灯最终绑定未完成，须先逐灯识别；当前该五路业务灯默认关闭，独立 GPIO5 报警可运行。
+手控应用分区剩余 912 字节；下一次灯绑定或功能增加后必须再次检查尺寸，超出时另行评估分区调整。
+激光盲区、光流地面条件、实际姿态方向、制动距离、机械振动和电源能力未做本次实物验证。
+1 米是触发阈值，不是保证在物理上恰好停在 1 米位置的制动距离。
+定点/定高依赖原有光流与高度信息有效，失效时保留原手动回退能力。
+相机通信灯只表示手控上传 ACK 正常，不证明摄像头图像质量或浏览器视频正常。
+使用这次飞控固件时必须配套这次手控固件，否则旧手控没有避障解除命令。
+逐灯、两路马达、失联/急停、前方测距与限位台架验收均未验证；尚未开展飞行试验。
+
+十四、维护
+保留 GBK 源文件原始编码；不要对全工程批量转换编码或行尾。
+先在台架确认 IO 和状态，再做可控环境下的飞行验收。
+后续改变阈值、灯映射或恢复方式时同步更新测试、此文档和 Git 提交。

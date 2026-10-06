@@ -89,7 +89,7 @@ static void test_altitude_mode(void)
         hc_packet_t bad=p;
         if(i==0) bad.state=1;
         if(i==1) bad.height=1;
-        if(i==2) bad.command=6;
+        if(i==2) bad.command=HC_CLEAR_OBSTACLE+1;
         if(i==3) bad.assist=4;
         if(i==4) bad.version=4;
         if(i==5) {bad.command=HC_STATUS;bad.state=8;}

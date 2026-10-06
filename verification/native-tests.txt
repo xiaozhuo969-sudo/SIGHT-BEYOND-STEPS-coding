@@ -1,0 +1,9 @@
+PASS: immediate exclusive directions, neutral-only delay, interrupted center, fist release, mounting, stale, timer wrap
+gyro_calibration tests passed
+PASS: HC3 lifecycle, downlink-only outage, warning recovery, manual/resume, diagnostics, watchdogs, CRC/sequence
+PASS: boot lock-only autoconnect/recovery, explicit launch, boot-held guard, USB handoff, watchdogs, stop priority
+PASS: swapped default directions, palm holds, flat waits 1s then forwards, yaw/roll selection, one axis, flight stage gates
+PASS: real STM32 frame, endian order, checksum, bounds, wrong command, no stale overwrite
+PASS: HUD wire format, integer units, zero/null, source ages, saturation, invalid/malformed messages, sequence wrap
+flight feedback, button recovery and mutually exclusive haptics: PASS
+8 native test executables passed

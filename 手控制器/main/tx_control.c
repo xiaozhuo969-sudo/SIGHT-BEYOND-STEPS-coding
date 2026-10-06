@@ -5,6 +5,7 @@
 static void phase(tx_control_t *s, unsigned next, uint32_t now)
 {
     s->phase = next; s->since = now; s->sent = 0;
+    s->obstacle_clear_pending=false;
 }
 bool tx_start_v3(tx_control_t *s, uint32_t now, uint32_t session)
 {
@@ -28,7 +29,7 @@ void tx_stop(tx_control_t *s, uint32_t now, unsigned reason)
 }
 void tx_fault(tx_control_t *s)
 {
-    s->phase = TX_FAULT; s->reason = TX_REASON_RADIO;
+    s->phase = TX_FAULT; s->reason = TX_REASON_RADIO; s->obstacle_clear_pending=false;
 }
 void tx_sent(tx_control_t *s) { if (s->sent < 10000) ++s->sent; }
 
@@ -58,6 +59,8 @@ bool tx_step(tx_control_t *s, uint32_t now, bool pose_valid, bool flat,
         if (s->phase == TX_ALT_RESUME && (uint32_t)(now-s->since)>3000)
             phase(s, TX_ALT_MANUAL, now);
     }
+    if(s->obstacle_clear_pending && (uint32_t)(now-s->obstacle_clear_ms)>=300)
+        s->obstacle_clear_pending=false;
     (void)flat;
     if (s->phase==TX_STOPPING && s->sent>=15 && (uint32_t)(now-s->since)>=500) {
         phase(s,TX_OFF,now);return false;
@@ -72,6 +75,16 @@ bool tx_step(tx_control_t *s, uint32_t now, bool pose_valid, bool flat,
     return true;
 }
 
+bool tx_clear_obstacle(tx_control_t *s, uint32_t now)
+{
+    unsigned needed=HC_FLAG_FEEDBACK_SUPPORTED|HC_FLAG_OBSTACLE|HC_FLAG_OBSTACLE_READY;
+    if(!s->v3 || (s->phase!=TX_ALT_LIVE && s->phase!=TX_ALT_MANUAL) ||
+       !s->feedback || (uint32_t)(now-s->feedback_ms)>=300 || s->link_warning ||
+       (s->air_flags&needed)!=needed || !(s->air_flags&1)) return false;
+    s->obstacle_clear_pending=true;s->obstacle_clear_ms=now;
+    s->obstacle_clear_sequence=(uint16_t)(s->sequence+1);
+    return true;
+}
 bool tx_can_takeoff(const tx_control_t *s, uint32_t now, bool flat_calibrated)
 {
     return s->v3 && s->phase==TX_ALT_IDLE && flat_calibrated && s->feedback &&
@@ -113,7 +126,12 @@ void tx_encode(tx_control_t *s, const uint16_t channels[8], uint8_t packet[32])
     if(s->v3 && s->phase==TX_ALT_TAKEOFF) p.command=HC_TAKEOFF;
     else if(s->v3 && s->phase==TX_ALT_LAND) p.command=HC_LAND;
     else if(s->v3 && s->phase==TX_ALT_RESUME) p.command=HC_RESUME;
-    memcpy(p.channels,channels,sizeof p.channels);hc_encode(&p,packet);
+    memcpy(p.channels,channels,sizeof p.channels);
+    if(s->obstacle_clear_pending && (s->phase==TX_ALT_LIVE||s->phase==TX_ALT_MANUAL)) {
+        p.command=HC_CLEAR_OBSTACLE;
+        for(unsigned i=0;i<4;++i) p.channels[i]=1500;
+    }
+    hc_encode(&p,packet);
 }
 void tx_feedback(tx_control_t *s, const uint8_t packet[32], uint32_t now)
 {
@@ -158,6 +176,9 @@ void tx_feedback(tx_control_t *s, const uint8_t packet[32], uint32_t now)
     s->air_seq=p.sequence;
     s->feedback=true;s->feedback_ms=now;s->feedback_sequence=p.sequence;
     s->air_flags=p.channels[0];s->air_reason=p.channels[1];s->air_command=p.channels[3];
+    if(s->obstacle_clear_pending && p.channels[3]==HC_CLEAR_OBSTACLE &&
+       (p.sequence==s->obstacle_clear_sequence || hc_newer(p.sequence,s->obstacle_clear_sequence)))
+        s->obstacle_clear_pending=false;
     if(s->v3) {
         s->air_stage=p.state&0x0f;s->air_height_valid=(p.state&HC_STATE_HEIGHT_FRESH)!=0;
         s->air_ground_ready=(p.state&HC_STATE_GROUND_READY)!=0;s->air_relative_mm=(int16_t)p.height;

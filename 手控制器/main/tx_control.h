@@ -10,6 +10,9 @@ enum { TX_REASON_NONE, TX_REASON_STOP, TX_REASON_HEARTBEAT, TX_REASON_IMU, TX_RE
        TX_REASON_FEEDBACK, TX_REASON_ARM_TIMEOUT, TX_REASON_AIR_LOCK };
 typedef struct {
     unsigned phase, reason, sent;
+    bool obstacle_clear_pending;
+    uint32_t obstacle_clear_ms;
+    uint16_t obstacle_clear_sequence;
     uint32_t since, heartbeat;
     uint16_t aux;
     bool v2, feedback, v3, detail;
@@ -32,6 +35,7 @@ typedef struct {
     uint16_t air_distance_cm;
     uint32_t telemetry_ms, air_telem_frames, air_telem_gap_ms, air_telem_max_gap_ms;
 } tx_control_t;
+bool tx_clear_obstacle(tx_control_t *s, uint32_t now);
 bool tx_arm(tx_control_t *s, uint32_t now, bool flat_calibrated);
 void tx_stop(tx_control_t *s, uint32_t now, unsigned reason);
 void tx_fault(tx_control_t *s);

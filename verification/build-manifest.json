@@ -1,0 +1,57 @@
+{
+  "date": "2026-10-06",
+  "baseline_commit": "c553144b31400812e187e00be3b5b88dbbc4630a",
+  "idf_version": "v6.0.3",
+  "idf_commit": "76f5dedd9950a3012fee8fb7d5586df21fc67802",
+  "arm_gcc": "13.2.1 20231009 (13.2.Rel1)",
+  "xtensa_gcc": "esp-15.2.0_20251204",
+  "cmake": "4.0.3",
+  "ninja": "1.12.1",
+  "native_test_executables_passed": 8,
+  "flight_elf_checks_passed": 245,
+  "baseline_flight_elf_checks_passed": 228,
+  "baseline_hand_build": "PASS",
+  "modified_hand_build": "PASS",
+  "hand_app_partition_bytes": 1048576,
+  "hand_app_free_bytes": 912,
+  "desktop_gui_baseline_failures": [
+    "test_device_calibration_and_layout",
+    "test_estop_visible_every_page_and_shortcut"
+  ],
+  "physical_led_roles_confirmed": false,
+  "hardware_flashed": false,
+  "hardware_flight_tested": false,
+  "staged_input_files_verified": 460,
+  "artifacts": {
+    "hand_app": {
+      "path": "D:/Espressif/builds/hand-release/hand_controller_imu.bin",
+      "bytes": 1047664,
+      "sha256": "8a0657f5447c7c2b05e8832e603b97f795be49123d8788be83fc9b435f0e213e"
+    },
+    "hand_bootloader": {
+      "path": "D:/Espressif/builds/hand-release/bootloader/bootloader.bin",
+      "bytes": 21232,
+      "sha256": "276523e5e76e90119dcba9e89558f417a84f53f4d37034535501093039dd71af"
+    },
+    "hand_partitions": {
+      "path": "D:/Espressif/builds/hand-release/partition_table/partition-table.bin",
+      "bytes": 3072,
+      "sha256": "7f00b6c042a89b15b0cac534f82ed988caf29278ff5700b0c511eb1b5bb7c820"
+    },
+    "flight_elf": {
+      "path": "D:/Espressif/builds/flight-feedback/official_hand.elf",
+      "bytes": 770480,
+      "sha256": "1fdac25a23d0989437669a25d7c8874d5bf7d31fc71f9bfd041d6a1f270149f2"
+    },
+    "flight_hex": {
+      "path": "D:/Espressif/builds/flight-feedback/official_hand.hex",
+      "bytes": 104907,
+      "sha256": "932e625f9141f99b54451a18edf92f92a0a0901ac3f37c6ac6a040294157043b"
+    },
+    "flight_template_NOT_direct_flash": {
+      "path": "D:/Espressif/builds/flight-feedback/official_hand.template.bin",
+      "bytes": 131072,
+      "sha256": "e14dc240ae4a5233c12297812f2d24829d1f4c0ce8819f8b455448db97ee963b"
+    }
+  }
+}
