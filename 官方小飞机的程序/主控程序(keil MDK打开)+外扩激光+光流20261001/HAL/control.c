@@ -189,31 +189,37 @@ void HeightPidControl(float dt)
  * acquired during translation, and seed D on command edges. */
 #define FLOW_I_MAX_DEG 3.0f
 #define FLOW_ANGLE_MAX_DEG 15.0f
+/* Hold-only proportional response: same signs, I/D and angle limit. */
+#define FLOW_HOLD_RATE_P_SCALE 2.0f
 typedef struct {
     float command, hold_integral;
     uint8_t captured;
 } FlowAxisState;
 static FlowAxisState flow_axis[2];
+static uint8_t flow_was_moving;
+static float flow_stop_trim[2];
 volatile uint8_t flow_control_status=WAITING_1;
 volatile uint16_t flow_target_captures;
 
 static void flow_control_reset(void)
 {
     pidRest(&pPidObject[8],4);
+    flow_was_moving=0;
     for(unsigned i=0;i<2;i++) {
+        flow_stop_trim[i]=0;
         flow_axis[i].command=0;
         flow_axis[i].hold_integral=0;
         flow_axis[i].captured=0;
     }
 }
 
-static void flow_rate_update(PidObject *pid,float dt)
+static void flow_rate_update(PidObject *pid,float dt,float p_scale)
 {
     float error=pid->desired-pid->measured+pid->offset;
     float bound=pid->ki>0 ? FLOW_I_MAX_DEG/pid->ki : 0;
     float old=LIMIT(pid->integ,-bound,bound);
     float integ=LIMIT(old+error*dt,-bound,bound);
-    float pd=pid->kp*error+pid->kd*(error-pid->prevError)/dt;
+    float pd=p_scale*pid->kp*error+pid->kd*(error-pid->prevError)/dt;
     float out=pd+pid->ki*integ;
     /* Do not wind up farther into the existing attitude output limit. */
     if((out>FLOW_ANGLE_MAX_DEG && error>0) ||
@@ -224,7 +230,7 @@ static void flow_rate_update(PidObject *pid,float dt)
 }
 
 static uint8_t flow_axis_update(FlowAxisState *state,PidObject *position,
-    PidObject *rate,float command,float measured_position,float velocity,float dt)
+    PidObject *rate,float command,float measured_position,float velocity,float dt,float p_scale)
 {
     uint8_t capture=0,changed=command!=state->command;
     if(changed && command!=0 && state->command==0)
@@ -246,8 +252,8 @@ static uint8_t flow_axis_update(FlowAxisState *state,PidObject *position,
     }
     rate->measured=velocity;
     /* Suppress setpoint derivative kick, not measured-velocity damping. */
-    if(changed)rate->prevError=rate->desired-rate->measured+rate->offset;
-    flow_rate_update(rate,dt);
+    if(changed || capture)rate->prevError=rate->desired-rate->measured+rate->offset;
+    flow_rate_update(rate,dt,p_scale);
     state->command=command;
     return capture;
 }
@@ -279,10 +285,25 @@ void FlowPidControl(float dt)
     if(!(dt>0))return;
     float x=Remote.roll>1750 ? -15 : Remote.roll<1250 ? 15 : 0;
     float y=Remote.pitch>1750 ? 15 : Remote.pitch<1250 ? -15 : 0;
+    uint8_t moving=x!=0 || y!=0 || Remote.yaw>1820 || Remote.yaw<1180;
+    if(!flow_was_moving && moving) {
+        flow_stop_trim[0]=pidPosRateX.integ;
+        flow_stop_trim[1]=pidPosRateY.integ;
+    }
+    if(flow_was_moving && !moving) {
+        /* A full stop anchors BOTH axes here, not an old cross-axis target.
+         * This is an edge: holding neutral never moves the anchor again. */
+        flow_axis[0].captured=flow_axis[1].captured=0;
+        /* Discard translation-era history on the cross axis as well. */
+        pidPosRateX.integ=flow_axis[0].hold_integral=flow_stop_trim[0];
+        pidPosRateY.integ=flow_axis[1].hold_integral=flow_stop_trim[1];
+    }
+    float p_scale=moving ? 1.0f : FLOW_HOLD_RATE_P_SCALE;
     uint8_t captured=flow_axis_update(&flow_axis[0],&pidPositionX,&pidPosRateX,
-        x,flow_x_lpf_att_i,flow_x_vel_lpf_i,dt);
+        x,flow_x_lpf_att_i,flow_x_vel_lpf_i,dt,p_scale);
     captured|=flow_axis_update(&flow_axis[1],&pidPositionY,&pidPosRateY,
-        y,flow_y_lpf_att_i,flow_y_vel_lpf_i,dt);
+        y,flow_y_lpf_att_i,flow_y_vel_lpf_i,dt,p_scale);
+    flow_was_moving=moving;
     if(captured)++flow_target_captures;
     pidRoll.desired=LIMIT(pidPosRateX.out,-FLOW_ANGLE_MAX_DEG,FLOW_ANGLE_MAX_DEG);
     pidPitch.desired=-LIMIT(pidPosRateY.out,-FLOW_ANGLE_MAX_DEG,FLOW_ANGLE_MAX_DEG);
