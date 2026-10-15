@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 # 小飞机（Sight Beyond Steps）
 
 手套手控 + 官方小飞机飞控 + 前视相机的联调工程。用手势和实体按键控制飞机，用前向测距做前方遇障保持，用手控灯和震动给出状态反馈，并在相机热点网页上叠加血氧、电压、姿态和测距。
@@ -146,3 +147,6 @@ python -B 手控制器/host/run.py
 | `project-documentation.txt` | 较早的双端反馈方案记录，以后续 hand-only / 飞控专项文档为准 |
 #   S I G H T - B E Y O N D - S T E P S - c o d i n g  
  
+=======
+# SIGHT-BEYOND-STEPS-coding
+>>>>>>> 8ba4f034973c9200a81a22d61854a8b9c857fe67
